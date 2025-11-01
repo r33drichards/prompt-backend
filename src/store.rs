@@ -135,7 +135,7 @@ impl Store {
             return Err(redis::RedisError::from((
                 redis::ErrorKind::ResponseError,
                 "Item not found",
-            ))));
+            )));
         }
 
         Ok(())
