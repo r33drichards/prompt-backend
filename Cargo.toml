@@ -16,3 +16,8 @@ sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-rustls
 sea-orm-migration = { version = "0.12", features = ["runtime-tokio-rustls", "sqlx-postgres"] }
 uuid = { version = "1.0", features = ["serde", "v4"] }
 migration = { path = "migration" }
+
+# Patch to avoid home v0.5.12 which requires edition2024
+# Using git source pointing to v0.5.9 tag from cargo repo
+[patch.crates-io]
+home = { git = "https://github.com/rust-lang/cargo", tag = "0.79.0" }
