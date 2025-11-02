@@ -73,7 +73,7 @@ const sessions = await api.handlersSessionsList();
 
 Using Nix:
 ```bash
-# Generate the TypeScript client
+# Generate the TypeScript client (uses version from sdk/package.json)
 nix run .#generateTypescriptClient
 
 # The client will be generated in ./generated-client
@@ -95,12 +95,15 @@ npm install -g @openapitools/openapi-generator-cli
 cargo build --release
 cargo run --release print-openapi > openapi.json
 
+# Read version from sdk/package.json
+SDK_VERSION=$(jq -r '.version' sdk/package.json)
+
 # Generate the TypeScript client
 openapi-generator-cli generate \
   -i openapi.json \
   -g typescript-fetch \
   -o generated-client \
-  --additional-properties=npmName=@wholelottahoopla/prompt-backend-client,npmVersion=0.1.0,supportsES6=true,typescriptThreePlus=true
+  --additional-properties=npmName=@wholelottahoopla/prompt-backend-client,npmVersion=$SDK_VERSION,supportsES6=true,typescriptThreePlus=true
 
 # Install and build
 cd generated-client
@@ -112,7 +115,7 @@ npm run build
 
 The SDK is automatically published to npm via GitHub Actions:
 
-- **Main branch**: Publishes stable versions (e.g., `0.1.0`)
+- **Main branch**: Publishes stable versions from `sdk/package.json` (e.g., `0.1.0`)
 - **Pull requests**: Publishes beta versions (e.g., `0.1.0-beta.pr123.abc1234`)
   - Beta versions are tagged with the PR number and commit SHA
   - Allows testing SDK changes before merging
@@ -122,6 +125,25 @@ To set up automated publishing:
 1. Create an npm access token at https://www.npmjs.com/settings/tokens
 2. Add it as a repository secret named `NPM_TOKEN`
 3. The workflow will automatically run on push and PR events
+
+#### SDK Versioning
+
+The SDK version is managed in `sdk/package.json`. To release a new version:
+
+```bash
+# Bump the version
+cd sdk
+npm version patch  # or minor, or major
+
+# Commit and push
+git add package.json
+git commit -m "Bump SDK version to 0.2.0"
+git push origin main
+
+# GitHub Actions will automatically publish the new version
+```
+
+See `sdk/README.md` for more details on versioning strategy.
 
 ## Quick Start
 

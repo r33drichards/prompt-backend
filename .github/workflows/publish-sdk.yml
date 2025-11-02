@@ -43,34 +43,35 @@ jobs:
       - name: Determine version
         id: version
         run: |
+          # Read base version from sdk/package.json
+          BASE_VERSION=$(jq -r '.version' sdk/package.json)
+
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
             # For PRs, use beta version with PR number and short SHA
-            BASE_VERSION="0.1.0"
             PR_NUMBER="${{ github.event.pull_request.number }}"
             SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
             VERSION="${BASE_VERSION}-beta.pr${PR_NUMBER}.${SHORT_SHA}"
           else
-            # For main branch, use the version from package.json or default
-            VERSION="0.1.0"
+            # For main branch, use the version from sdk/package.json
+            VERSION="$BASE_VERSION"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Publishing version: $VERSION"
+          echo "📦 Package version: $VERSION"
+
+      - name: Update version for beta/custom builds
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')
+        run: |
+          # Temporarily update sdk/package.json with the beta/custom version
+          jq '.version = "${{ steps.version.outputs.version }}"' sdk/package.json > sdk/package.json.tmp
+          mv sdk/package.json.tmp sdk/package.json
+          echo "Updated sdk/package.json to version ${{ steps.version.outputs.version }}"
+          cat sdk/package.json
 
       - name: Generate TypeScript client using Nix
         run: |
           nix run .#generateTypescriptClient generated-client
-
-      - name: Update package.json version and metadata
-        working-directory: generated-client
-        run: |
-          npm pkg set version="${{ steps.version.outputs.version }}"
-          npm pkg set repository.type="git"
-          npm pkg set repository.url="git+https://github.com/r33drichards/prompt-backend.git"
-          npm pkg set bugs.url="https://github.com/r33drichards/prompt-backend/issues"
-          npm pkg set homepage="https://github.com/r33drichards/prompt-backend#readme"
-          cat package.json
 
       - name: Publish to npm (main branch)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

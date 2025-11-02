@@ -38,6 +38,22 @@
         generateTypescriptClientScript = pkgs.writeShellScriptBin "generate-typescript-client" ''
           set -e
 
+          # Read version and package info from sdk/package.json
+          SDK_PACKAGE_JSON="sdk/package.json"
+          if [ ! -f "$SDK_PACKAGE_JSON" ]; then
+            echo "Error: $SDK_PACKAGE_JSON not found"
+            exit 1
+          fi
+
+          NPM_NAME=$(${pkgs.jq}/bin/jq -r '.name' "$SDK_PACKAGE_JSON")
+          NPM_VERSION=$(${pkgs.jq}/bin/jq -r '.version' "$SDK_PACKAGE_JSON")
+          DESCRIPTION=$(${pkgs.jq}/bin/jq -r '.description' "$SDK_PACKAGE_JSON")
+          AUTHOR=$(${pkgs.jq}/bin/jq -r '.author' "$SDK_PACKAGE_JSON")
+          LICENSE=$(${pkgs.jq}/bin/jq -r '.license' "$SDK_PACKAGE_JSON")
+
+          echo "📦 Package: $NPM_NAME"
+          echo "📌 Version: $NPM_VERSION"
+
           echo "🔨 Building the backend..."
           ${pkgs.cargo}/bin/cargo build --release
 
@@ -56,13 +72,24 @@
             -i "$TEMP_DIR/openapi.json" \
             -g typescript-fetch \
             -o "$OUTPUT_DIR" \
-            --additional-properties=npmName=@wholelottahoopla/prompt-backend-client,npmVersion=0.1.0,supportsES6=true,typescriptThreePlus=true
+            --additional-properties=npmName=$NPM_NAME,npmVersion=$NPM_VERSION,supportsES6=true,typescriptThreePlus=true
 
           echo "📦 Setting up npm package..."
           cd "$OUTPUT_DIR"
 
-          # Add additional package.json metadata if needed
-          ${pkgs.jq}/bin/jq '.description = "TypeScript API client for prompt-backend" | .author = "wholelottahoopla" | .license = "MIT"' package.json > package.json.tmp
+          # Merge metadata from sdk/package.json
+          ${pkgs.jq}/bin/jq \
+            --arg desc "$DESCRIPTION" \
+            --arg author "$AUTHOR" \
+            --arg license "$LICENSE" \
+            --slurpfile sdk "../$SDK_PACKAGE_JSON" \
+            '.description = $desc |
+             .author = $author |
+             .license = $license |
+             .repository = $sdk[0].repository |
+             .bugs = $sdk[0].bugs |
+             .homepage = $sdk[0].homepage' \
+            package.json > package.json.tmp
           mv package.json.tmp package.json
 
           # Install dependencies
