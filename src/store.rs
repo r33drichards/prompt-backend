@@ -7,7 +7,7 @@ const ITEMS_KEY: &str = "items";
 /// Store provides an abstract interface for CRUD operations on Redis
 #[derive(Clone)]
 pub struct Store {
-    redis_url: String,
+    pub redis_url: String,
 }
 
 impl Store {
