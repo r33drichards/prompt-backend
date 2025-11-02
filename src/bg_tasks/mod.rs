@@ -8,8 +8,6 @@ use apalis_sql::postgres::{PgListen, PgPool, PostgresStorage};
 use std::time::Duration;
 use tracing::info;
 
-use crate::store::Store;
-
 /// Available background task names
 pub const OUTBOX_PUBLISHER: &str = "outbox-publisher";
 pub const SESSION_HANDLER: &str = "session-handler";
@@ -21,7 +19,7 @@ pub fn all_tasks() -> Vec<&'static str> {
 
 /// Context for running background tasks, holds optional connections to backends
 pub struct TaskContext {
-    pub store: Option<Store>,
+    pub redis_url: Option<String>,
     pub db: Option<PgPool>,
 }
 
@@ -31,12 +29,6 @@ impl TaskContext {
         redis_url: Option<String>,
         database_url: Option<String>,
     ) -> Result<Self> {
-        let store = if let Some(url) = redis_url {
-            Some(Store::new(url))
-        } else {
-            None
-        };
-
         let db = if let Some(url) = database_url {
             Some(
                 PgPool::connect(&url)
@@ -47,7 +39,7 @@ impl TaskContext {
             None
         };
 
-        Ok(Self { store, db })
+        Ok(Self { redis_url, db })
     }
 
     /// Run background tasks based on the provided task names
@@ -129,12 +121,12 @@ impl TaskContext {
                 Ok(monitor.register(worker))
             }
             SESSION_HANDLER => {
-                let store = self
-                    .store
+                let redis_url = self
+                    .redis_url
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("Redis connection required for {}", task_name))?;
 
-                let conn = apalis_redis::connect(store.redis_url.clone()).await?;
+                let conn = apalis_redis::connect(redis_url.clone()).await?;
                 let storage = RedisStorage::new(conn);
 
                 let worker = WorkerBuilder::new(SESSION_HANDLER)
