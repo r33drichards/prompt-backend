@@ -33,7 +33,117 @@ This abstraction makes it easy to:
 All endpoints automatically generate OpenAPI specs thanks to `rocket_okapi`:
 - Swagger UI available at `/swagger-ui/`
 - RapiDoc available at `/rapidoc/`
-- Export OpenAPI JSON with `cargo run -- --print-openapi`
+- Export OpenAPI JSON with `cargo run -- print-openapi`
+
+### TypeScript SDK Generation
+
+The template automatically generates and publishes a TypeScript API client to npm:
+
+#### Using the Published SDK
+
+```bash
+# Install the stable version
+npm install @wholelottahoopla/prompt-backend-client
+
+# Or install a beta version from a PR (for testing)
+npm install @wholelottahoopla/prompt-backend-client@0.1.0-beta.pr123.abc1234
+```
+
+```typescript
+import { Configuration, DefaultApi } from '@wholelottahoopla/prompt-backend-client';
+
+const config = new Configuration({
+  basePath: 'http://localhost:8000'
+});
+const api = new DefaultApi(config);
+
+// Create a session
+const result = await api.handlersSessionsCreate({
+  inbox_status: 'Pending',
+  messages: null,
+  sbx_config: null,
+  parent: null
+});
+
+// List all sessions
+const sessions = await api.handlersSessionsList();
+```
+
+#### Generating the SDK Locally
+
+Using Nix:
+```bash
+# Generate the TypeScript client (uses version from sdk/package.json)
+nix run .#generateTypescriptClient
+
+# The client will be generated in ./generated-client
+cd generated-client
+npm install
+npm run build
+
+# Publish to npm (requires authentication)
+npm login
+npm publish --access public
+```
+
+Manual generation without Nix:
+```bash
+# Install openapi-generator-cli
+npm install -g @openapitools/openapi-generator-cli
+
+# Build and generate the OpenAPI spec
+cargo build --release
+cargo run --release print-openapi > openapi.json
+
+# Read version from sdk/package.json
+SDK_VERSION=$(jq -r '.version' sdk/package.json)
+
+# Generate the TypeScript client
+openapi-generator-cli generate \
+  -i openapi.json \
+  -g typescript-fetch \
+  -o generated-client \
+  --additional-properties=npmName=@wholelottahoopla/prompt-backend-client,npmVersion=$SDK_VERSION,supportsES6=true,typescriptThreePlus=true
+
+# Install and build
+cd generated-client
+npm install
+npm run build
+```
+
+#### Automated Publishing
+
+The SDK is automatically published to npm via GitHub Actions:
+
+- **Main branch**: Publishes stable versions from `sdk/package.json` (e.g., `0.1.0`)
+- **Pull requests**: Publishes beta versions (e.g., `0.1.0-beta.pr123.abc1234`)
+  - Beta versions are tagged with the PR number and commit SHA
+  - Allows testing SDK changes before merging
+  - Automatically commented on PRs with installation instructions
+
+To set up automated publishing:
+1. Create an npm access token at https://www.npmjs.com/settings/tokens
+2. Add it as a repository secret named `NPM_TOKEN`
+3. The workflow will automatically run on push and PR events
+
+#### SDK Versioning
+
+The SDK version is managed in `sdk/package.json`. To release a new version:
+
+```bash
+# Bump the version
+cd sdk
+npm version patch  # or minor, or major
+
+# Commit and push
+git add package.json
+git commit -m "Bump SDK version to 0.2.0"
+git push origin main
+
+# GitHub Actions will automatically publish the new version
+```
+
+See `sdk/README.md` for more details on versioning strategy.
 
 ## Quick Start
 

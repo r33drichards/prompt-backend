@@ -34,6 +34,81 @@
           redis
         ];
 
+        # Script to generate TypeScript API client
+        generateTypescriptClientScript = pkgs.writeShellScriptBin "generate-typescript-client" ''
+          set -e
+
+          # Read version and package info from sdk/package.json
+          SDK_PACKAGE_JSON="sdk/package.json"
+          if [ ! -f "$SDK_PACKAGE_JSON" ]; then
+            echo "Error: $SDK_PACKAGE_JSON not found"
+            exit 1
+          fi
+
+          NPM_NAME=$(${pkgs.jq}/bin/jq -r '.name' "$SDK_PACKAGE_JSON")
+          NPM_VERSION=$(${pkgs.jq}/bin/jq -r '.version' "$SDK_PACKAGE_JSON")
+          DESCRIPTION=$(${pkgs.jq}/bin/jq -r '.description' "$SDK_PACKAGE_JSON")
+          AUTHOR=$(${pkgs.jq}/bin/jq -r '.author' "$SDK_PACKAGE_JSON")
+          LICENSE=$(${pkgs.jq}/bin/jq -r '.license' "$SDK_PACKAGE_JSON")
+
+          echo "📦 Package: $NPM_NAME"
+          echo "📌 Version: $NPM_VERSION"
+
+          echo "🔨 Building the backend..."
+          ${pkgs.cargo}/bin/cargo build --release
+
+          echo "📝 Generating OpenAPI specification..."
+          OPENAPI_SPEC=$(${pkgs.cargo}/bin/cargo run --release print-openapi)
+
+          # Create a temporary directory for the spec
+          TEMP_DIR=$(mktemp -d)
+          echo "$OPENAPI_SPEC" > "$TEMP_DIR/openapi.json"
+
+          echo "🚀 Generating TypeScript client..."
+          OUTPUT_DIR="''${1:-./generated-client}"
+          rm -rf "$OUTPUT_DIR"
+
+          ${pkgs.openapi-generator-cli}/bin/openapi-generator-cli generate \
+            -i "$TEMP_DIR/openapi.json" \
+            -g typescript-fetch \
+            -o "$OUTPUT_DIR" \
+            --additional-properties=npmName=$NPM_NAME,npmVersion=$NPM_VERSION,supportsES6=true,typescriptThreePlus=true
+
+          echo "📦 Setting up npm package..."
+          cd "$OUTPUT_DIR"
+
+          # Merge metadata from sdk/package.json
+          ${pkgs.jq}/bin/jq \
+            --arg desc "$DESCRIPTION" \
+            --arg author "$AUTHOR" \
+            --arg license "$LICENSE" \
+            --slurpfile sdk "../$SDK_PACKAGE_JSON" \
+            '.description = $desc |
+             .author = $author |
+             .license = $license |
+             .repository = $sdk[0].repository |
+             .bugs = $sdk[0].bugs |
+             .homepage = $sdk[0].homepage' \
+            package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+          # Install dependencies
+          ${pkgs.nodejs}/bin/npm install
+
+          # Build the TypeScript client
+          ${pkgs.nodejs}/bin/npm run build || echo "No build script found, skipping..."
+
+          echo "✅ TypeScript client generated successfully in $OUTPUT_DIR"
+          echo ""
+          echo "To publish to npm:"
+          echo "  cd $OUTPUT_DIR"
+          echo "  npm login"
+          echo "  npm publish --access public"
+
+          # Cleanup
+          rm -rf "$TEMP_DIR"
+        '';
+
       in
       {
         # Development shell
@@ -55,6 +130,10 @@
 
             # Redis CLI for debugging
             redis
+
+            # OpenAPI and TypeScript client generation
+            openapi-generator-cli
+            nodejs
           ];
 
           shellHook = ''
@@ -111,6 +190,12 @@
               "8000/tcp" = {};
             };
           };
+        };
+
+        # Apps
+        apps.generateTypescriptClient = {
+          type = "app";
+          program = "${generateTypescriptClientScript}/bin/generate-typescript-client";
         };
       }
     );

@@ -1,0 +1,15 @@
+{
+  "name": "@wholelottahoopla/prompt-backend-client",
+  "version": "0.1.0",
+  "description": "TypeScript API client for prompt-backend",
+  "author": "wholelottahoopla",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/r33drichards/prompt-backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/r33drichards/prompt-backend/issues"
+  },
+  "homepage": "https://github.com/r33drichards/prompt-backend#readme"
+}
