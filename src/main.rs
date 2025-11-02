@@ -35,7 +35,7 @@ struct Cli {
     bg_tasks: Vec<String>,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, PartialEq)]
 enum Commands {
     /// Print the OpenAPI specification in JSON format
     PrintOpenapi,
@@ -94,11 +94,8 @@ async fn main() -> anyhow::Result<()> {
         cli.bg_tasks
     };
 
-    let should_run_server = match cli.command {
-        Some(Commands::Serve) => true,
-        None => bg_task_names.is_empty(), // Default: run server only if no bg tasks specified
-        _ => false,
-    };
+    let should_run_server = cli.command == Some(Commands::Serve)
+                            || (cli.command.is_none() && bg_task_names.is_empty());
 
     let should_run_bg_tasks = !bg_task_names.is_empty();
 
