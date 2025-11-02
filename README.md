@@ -260,29 +260,36 @@ The application includes an Apalis-based background job processing system with t
 ### Running Background Tasks
 
 ```bash
-# Run all background tasks
+# Run web server only
+cargo run -- --server
+
+# Run all background tasks only
 cargo run -- --bg-tasks -A
 
-# Run specific tasks
+# Run specific background tasks only
 cargo run -- --bg-tasks outbox-publisher session-handler
 
-# Run only background tasks (no web server)
-cargo run -- --bg-tasks outbox-publisher
+# Run web server AND background tasks together
+cargo run -- --server --bg-tasks session-handler
 
-# Run web server with background tasks
-cargo run -- serve --bg-tasks session-handler
+# Run web server AND all background tasks
+cargo run -- --server --bg-tasks -A
 
-# Run web server only (default)
-cargo run
+# Print OpenAPI specification
+cargo run -- print-openapi
 ```
 
 ### CLI Options
 
-- `serve`: Run the web server (default if no bg-tasks specified)
-- `--bg-tasks <TASKS>`: Enable background tasks
+The CLI uses independent flags - specify which services to run:
+
+- `--server`: Run the web server
+- `--bg-tasks <TASKS>`: Run background tasks
   - `-A` or `--all`: Run all available tasks
   - Or specify task names: `outbox-publisher session-handler`
 - `print-openapi`: Print OpenAPI specification and exit
+
+**Note**: You must specify at least one service (`--server` and/or `--bg-tasks`). The flags are independent and can be combined.
 
 ### Task Implementations
 

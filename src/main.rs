@@ -3,6 +3,7 @@ extern crate rocket;
 
 use clap::{Parser, Subcommand};
 use dotenv::dotenv;
+use tracing::info;
 
 use crate::store::Store;
 use crate::db::establish_connection;
@@ -30,6 +31,10 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
+    /// Run the web server
+    #[arg(long)]
+    server: bool,
+
     /// Enable background tasks. Use -A/--all to run all tasks, or specify task names
     #[arg(long = "bg-tasks", value_name = "TASKS")]
     bg_tasks: Vec<String>,
@@ -39,8 +44,6 @@ struct Cli {
 enum Commands {
     /// Print the OpenAPI specification in JSON format
     PrintOpenapi,
-    /// Run the server (default)
-    Serve,
 }
 
 /// Generate OpenAPI specification
@@ -82,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    // Determine which background tasks to run
+    // Determine which background tasks to run (empty vec if none specified)
     let bg_task_names: Vec<String> = if cli.bg_tasks.contains(&"-A".to_string())
         || cli.bg_tasks.contains(&"--all".to_string())
     {
@@ -94,45 +97,40 @@ async fn main() -> anyhow::Result<()> {
         cli.bg_tasks
     };
 
-    let should_run_server = cli.command == Some(Commands::Serve)
-                            || (cli.command.is_none() && bg_task_names.is_empty());
+    let mut handles = vec![];
 
-    let should_run_bg_tasks = !bg_task_names.is_empty();
-
-    // Run both server and background tasks if needed
-    if should_run_server && should_run_bg_tasks {
-        // Run both concurrently
+    // Spawn server if --server flag is present
+    if cli.server {
         let server_redis_url = redis_url.clone();
         let server_database_url = database_url.clone();
 
         let server_handle = tokio::spawn(async move {
+            info!("Starting web server");
             run_server(server_redis_url, server_database_url).await
         });
 
+        handles.push(server_handle);
+    }
+
+    // Spawn background tasks if --bg-tasks flag is present
+    if !bg_task_names.is_empty() {
         let bg_tasks_handle = tokio::spawn(async move {
-            bg_tasks::run_bg_tasks(bg_task_names, redis_url, database_url)
-                .await
-                .expect("Background tasks failed");
+            info!("Starting background tasks");
+            bg_tasks::run_bg_tasks(bg_task_names, redis_url, database_url).await
         });
 
-        // Wait for both to complete (or shutdown signal)
-        tokio::select! {
-            _ = server_handle => {
-                println!("Server stopped");
-            }
-            _ = bg_tasks_handle => {
-                println!("Background tasks stopped");
-            }
-        }
-    } else if should_run_server {
-        // Run only server
-        run_server(redis_url, database_url).await?;
-    } else if should_run_bg_tasks {
-        // Run only background tasks
-        bg_tasks::run_bg_tasks(bg_task_names, redis_url, database_url).await?;
-    } else {
-        eprintln!("No operation specified. Use --help for usage information.");
-        return Err(anyhow::anyhow!("No operation specified"));
+        handles.push(bg_tasks_handle);
+    }
+
+    // If no services specified, error out
+    if handles.is_empty() {
+        eprintln!("No services specified. Use --server and/or --bg-tasks, or --help for usage.");
+        return Err(anyhow::anyhow!("No services specified"));
+    }
+
+    // Wait for all services to complete
+    for handle in handles {
+        handle.await??;
     }
 
     Ok(())
