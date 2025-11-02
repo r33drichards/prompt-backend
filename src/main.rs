@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate rocket;
 
+use clap::{Parser, Subcommand};
 use dotenv::dotenv;
 
 use crate::store::Store;
@@ -12,7 +13,6 @@ use rocket_okapi::{openapi_get_routes, rapidoc::*, swagger_ui::*};
 
 use sea_orm_migration::prelude::*;
 
-use std::env;
 use tokio::sync::Mutex;
 
 mod db;
@@ -21,32 +21,59 @@ mod error;
 mod handlers;
 mod store;
 
+/// CLI application for the prompt backend server
+#[derive(Parser)]
+#[command(name = "prompt-backend")]
+#[command(about = "A Rocket web server with Redis and PostgreSQL support", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Print the OpenAPI specification in JSON format
+    PrintOpenapi,
+    /// Run the server (default)
+    Serve,
+}
+
+/// Generate OpenAPI specification
+fn generate_openapi_spec() -> String {
+    let settings = rocket_okapi::settings::OpenApiSettings::new();
+    let spec = rocket_okapi::openapi_spec![
+        handlers::items::create,
+        handlers::items::read,
+        handlers::items::list,
+        handlers::items::update,
+        handlers::items::delete,
+        handlers::sessions::create,
+        handlers::sessions::read,
+        handlers::sessions::list,
+        handlers::sessions::update,
+        handlers::sessions::delete,
+    ](&settings);
+    serde_json::to_string_pretty(&spec).unwrap()
+}
+
 #[rocket::main]
 async fn main() {
     dotenv().ok();
-    let args: Vec<String> = env::args().collect();
 
-    // Support --print-openapi flag for generating OpenAPI spec
-    if args.contains(&"--print-openapi".to_string()) {
-        let settings = rocket_okapi::settings::OpenApiSettings::new();
-        let spec = rocket_okapi::openapi_spec![
-            handlers::items::create,
-            handlers::items::read,
-            handlers::items::list,
-            handlers::items::update,
-            handlers::items::delete,
-            handlers::sessions::create,
-            handlers::sessions::read,
-            handlers::sessions::list,
-            handlers::sessions::update,
-            handlers::sessions::delete,
-        ](&settings);
-        println!("{}", serde_json::to_string_pretty(&spec).unwrap());
-        return;
+    let cli = Cli::parse();
+
+    match cli.command {
+        Some(Commands::PrintOpenapi) => {
+            println!("{}", generate_openapi_spec());
+            return;
+        }
+        Some(Commands::Serve) | None => {
+            // Run the server (default behavior)
+        }
     }
 
-    let redis_url = env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let store = Store::new(redis_url.clone());
     let db = establish_connection(&database_url)
@@ -107,4 +134,15 @@ async fn main() {
         )
         .launch()
         .await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_openapi_spec_snapshot() {
+        let spec = generate_openapi_spec();
+        insta::assert_snapshot!(spec);
+    }
 }
