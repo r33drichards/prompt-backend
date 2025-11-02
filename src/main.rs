@@ -11,6 +11,7 @@ use crate::db::establish_connection;
 use rocket_okapi::settings::UrlObject;
 use rocket_okapi::swagger_ui::make_swagger_ui;
 use rocket_okapi::{openapi_get_routes, rapidoc::*, swagger_ui::*};
+use rocket_cors::{AllowedOrigins, CorsOptions};
 
 use sea_orm_migration::prelude::*;
 
@@ -160,12 +161,19 @@ async fn run_server(redis_url: String, database_url: String) -> anyhow::Result<(
         .expect("Failed to run migrations");
     println!("Migrations completed successfully");
 
+    // Configure CORS to allow all origins
+    let cors = CorsOptions::default()
+        .allowed_origins(AllowedOrigins::all())
+        .to_cors()
+        .expect("Failed to create CORS fairing");
+
     let _ = rocket::build()
         .configure(rocket::Config {
             address: "0.0.0.0".parse().expect("valid IP address"),
             port: 8000,
             ..rocket::Config::default()
         })
+        .attach(cors)
         .manage(Mutex::new(store))
         .manage(db)
         .mount(
