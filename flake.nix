@@ -34,6 +34,54 @@
           redis
         ];
 
+        # Script to generate TypeScript API client
+        generateTypescriptClientScript = pkgs.writeShellScriptBin "generate-typescript-client" ''
+          set -e
+
+          echo "🔨 Building the backend..."
+          ${pkgs.cargo}/bin/cargo build --release
+
+          echo "📝 Generating OpenAPI specification..."
+          OPENAPI_SPEC=$(${pkgs.cargo}/bin/cargo run --release print-openapi)
+
+          # Create a temporary directory for the spec
+          TEMP_DIR=$(mktemp -d)
+          echo "$OPENAPI_SPEC" > "$TEMP_DIR/openapi.json"
+
+          echo "🚀 Generating TypeScript client..."
+          OUTPUT_DIR="''${1:-./generated-client}"
+          rm -rf "$OUTPUT_DIR"
+
+          ${pkgs.openapi-generator-cli}/bin/openapi-generator-cli generate \
+            -i "$TEMP_DIR/openapi.json" \
+            -g typescript-fetch \
+            -o "$OUTPUT_DIR" \
+            --additional-properties=npmName=@r33drichards/prompt-backend-client,npmVersion=0.1.0,supportsES6=true,typescriptThreePlus=true
+
+          echo "📦 Setting up npm package..."
+          cd "$OUTPUT_DIR"
+
+          # Add additional package.json metadata if needed
+          ${pkgs.jq}/bin/jq '.description = "TypeScript API client for prompt-backend" | .author = "r33drichards" | .license = "MIT"' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+          # Install dependencies
+          ${pkgs.nodejs}/bin/npm install
+
+          # Build the TypeScript client
+          ${pkgs.nodejs}/bin/npm run build || echo "No build script found, skipping..."
+
+          echo "✅ TypeScript client generated successfully in $OUTPUT_DIR"
+          echo ""
+          echo "To publish to npm:"
+          echo "  cd $OUTPUT_DIR"
+          echo "  npm login"
+          echo "  npm publish --access public"
+
+          # Cleanup
+          rm -rf "$TEMP_DIR"
+        '';
+
       in
       {
         # Development shell
@@ -55,6 +103,10 @@
 
             # Redis CLI for debugging
             redis
+
+            # OpenAPI and TypeScript client generation
+            openapi-generator-cli
+            nodejs
           ];
 
           shellHook = ''
@@ -111,6 +163,12 @@
               "8000/tcp" = {};
             };
           };
+        };
+
+        # Apps
+        apps.generateTypescriptClient = {
+          type = "app";
+          program = "${generateTypescriptClientScript}/bin/generate-typescript-client";
         };
       }
     );

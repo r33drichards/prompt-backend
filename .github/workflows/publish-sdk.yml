@@ -1,0 +1,196 @@
+name: Generate and Publish TypeScript SDK
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 0.1.0)'
+        required: false
+        default: ''
+
+env:
+  PACKAGE_NAME: "@r33drichards/prompt-backend-client"
+
+jobs:
+  generate-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for npm provenance
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install OpenAPI Generator CLI
+        run: |
+          nix profile install nixpkgs#openapi-generator-cli
+          nix profile install nixpkgs#jq
+
+      - name: Build backend
+        run: cargo build --release
+
+      - name: Generate OpenAPI spec
+        run: |
+          cargo run --release print-openapi > openapi.json
+          echo "Generated OpenAPI spec:"
+          cat openapi.json | jq '.info'
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            # For PRs, use beta version with PR number and short SHA
+            BASE_VERSION="0.1.0"
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            VERSION="${BASE_VERSION}-beta.pr${PR_NUMBER}.${SHORT_SHA}"
+          else
+            # For main branch, use the version from package.json or default
+            VERSION="0.1.0"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+
+      - name: Generate TypeScript client
+        run: |
+          openapi-generator-cli generate \
+            -i openapi.json \
+            -g typescript-fetch \
+            -o generated-client \
+            --additional-properties=npmName=${{ env.PACKAGE_NAME }},npmVersion=${{ steps.version.outputs.version }},supportsES6=true,typescriptThreePlus=true
+
+      - name: Update package.json metadata
+        working-directory: generated-client
+        run: |
+          jq '.description = "TypeScript API client for prompt-backend" |
+              .author = "r33drichards" |
+              .license = "MIT" |
+              .repository = {
+                "type": "git",
+                "url": "git+https://github.com/r33drichards/prompt-backend.git"
+              } |
+              .bugs = {
+                "url": "https://github.com/r33drichards/prompt-backend/issues"
+              } |
+              .homepage = "https://github.com/r33drichards/prompt-backend#readme"' \
+            package.json > package.json.tmp
+          mv package.json.tmp package.json
+          cat package.json
+
+      - name: Install dependencies
+        working-directory: generated-client
+        run: npm install
+
+      - name: Build TypeScript client
+        working-directory: generated-client
+        run: |
+          if grep -q '"build"' package.json; then
+            npm run build
+          else
+            echo "No build script found, skipping build step"
+          fi
+
+      - name: Publish to npm (main branch)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: generated-client
+        run: |
+          npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to npm (beta - PR)
+        if: github.event_name == 'pull_request'
+        working-directory: generated-client
+        run: |
+          npm publish --access public --tag beta --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to npm (manual)
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: generated-client
+        run: |
+          npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Comment on PR with package info
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ steps.version.outputs.version }}';
+            const packageName = '${{ env.PACKAGE_NAME }}';
+
+            const comment = `## 📦 TypeScript SDK Published
+
+            A beta version of the TypeScript SDK has been published for this PR!
+
+            **Package:** \`${packageName}\`
+            **Version:** \`${version}\`
+
+            ### Installation
+            \`\`\`bash
+            npm install ${packageName}@${version}
+            # or
+            yarn add ${packageName}@${version}
+            # or
+            pnpm add ${packageName}@${version}
+            \`\`\`
+
+            ### Usage
+            \`\`\`typescript
+            import { Configuration, DefaultApi } from '${packageName}';
+
+            const config = new Configuration({
+              basePath: 'http://localhost:8000'
+            });
+            const api = new DefaultApi(config);
+
+            // Use the API...
+            const sessions = await api.handlersSessionsList();
+            console.log(sessions);
+            \`\`\`
+
+            This beta package will be available on npm with the \`beta\` tag.
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Upload generated client as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-client-${{ steps.version.outputs.version }}
+          path: generated-client/
+          retention-days: 30

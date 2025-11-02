@@ -1,2 +1,6 @@
 target/
 .env
+
+# Generated TypeScript client
+generated-client/
+openapi.json
