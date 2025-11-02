@@ -34,6 +34,26 @@
           redis
         ];
 
+        # Package the Rust application
+        rustPackage = pkgs.rustPlatform.buildRustPackage {
+          pname = "rust-redis-webserver";
+          version = "0.1.0";
+
+          src = ./.;
+
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+          };
+
+          nativeBuildInputs = nativeBuildInputs;
+          buildInputs = buildInputs;
+
+          meta = with pkgs.lib; {
+            description = "A Rust webserver with Redis CRUD operations";
+            license = licenses.mit;
+          };
+        };
+
         # Script to generate TypeScript API client
         generateTypescriptClientScript = pkgs.writeShellScriptBin "generate-typescript-client" ''
           set -e
@@ -54,11 +74,8 @@
           echo "📦 Package: $NPM_NAME"
           echo "📌 Version: $NPM_VERSION"
 
-          echo "🔨 Building the backend..."
-          ${rustToolchain}/bin/cargo build --release
-
           echo "📝 Generating OpenAPI specification..."
-          OPENAPI_SPEC=$(${rustToolchain}/bin/cargo run --release print-openapi)
+          OPENAPI_SPEC=$(${rustPackage}/bin/rust-redis-webserver print-openapi)
 
           # Create a temporary directory for the spec
           TEMP_DIR=$(mktemp -d)
@@ -160,24 +177,7 @@
         };
 
         # Package the Rust application
-        packages.default = pkgs.rustPlatform.buildRustPackage {
-          pname = "rust-redis-webserver";
-          version = "0.1.0";
-
-          src = ./.;
-
-          cargoLock = {
-            lockFile = ./Cargo.lock;
-          };
-
-          nativeBuildInputs = nativeBuildInputs;
-          buildInputs = buildInputs;
-
-          meta = with pkgs.lib; {
-            description = "A Rust webserver with Redis CRUD operations";
-            license = licenses.mit;
-          };
-        };
+        packages.default = rustPackage;
 
         # Docker image (optional, uses Dockerfile)
         packages.docker = pkgs.dockerTools.buildLayeredImage {
