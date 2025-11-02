@@ -55,10 +55,10 @@
           echo "📌 Version: $NPM_VERSION"
 
           echo "🔨 Building the backend..."
-          ${pkgs.cargo}/bin/cargo build --release
+          ${rustToolchain}/bin/cargo build --release
 
           echo "📝 Generating OpenAPI specification..."
-          OPENAPI_SPEC=$(${pkgs.cargo}/bin/cargo run --release print-openapi)
+          OPENAPI_SPEC=$(${rustToolchain}/bin/cargo run --release print-openapi)
 
           # Create a temporary directory for the spec
           TEMP_DIR=$(mktemp -d)
