@@ -15,7 +15,7 @@ on:
         default: ''
 
 env:
-  PACKAGE_NAME: "@r33drichards/prompt-backend-client"
+  PACKAGE_NAME: "@wholelottahoopla/prompt-backend-client"
 
 jobs:
   generate-and-publish:
@@ -34,30 +34,11 @@ jobs:
       - name: Setup Nix cache
         uses: DeterminateSystems/magic-nix-cache-action@main
 
-      - name: Set up Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Install OpenAPI Generator CLI
-        run: |
-          nix profile install nixpkgs#openapi-generator-cli
-          nix profile install nixpkgs#jq
-
-      - name: Build backend
-        run: cargo build --release
-
-      - name: Generate OpenAPI spec
-        run: |
-          cargo run --release print-openapi > openapi.json
-          echo "Generated OpenAPI spec:"
-          cat openapi.json | jq '.info'
 
       - name: Determine version
         id: version
@@ -77,44 +58,19 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Publishing version: $VERSION"
 
-      - name: Generate TypeScript client
+      - name: Generate TypeScript client using Nix
         run: |
-          openapi-generator-cli generate \
-            -i openapi.json \
-            -g typescript-fetch \
-            -o generated-client \
-            --additional-properties=npmName=${{ env.PACKAGE_NAME }},npmVersion=${{ steps.version.outputs.version }},supportsES6=true,typescriptThreePlus=true
+          nix run .#generateTypescriptClient generated-client
 
-      - name: Update package.json metadata
+      - name: Update package.json version and metadata
         working-directory: generated-client
         run: |
-          jq '.description = "TypeScript API client for prompt-backend" |
-              .author = "r33drichards" |
-              .license = "MIT" |
-              .repository = {
-                "type": "git",
-                "url": "git+https://github.com/r33drichards/prompt-backend.git"
-              } |
-              .bugs = {
-                "url": "https://github.com/r33drichards/prompt-backend/issues"
-              } |
-              .homepage = "https://github.com/r33drichards/prompt-backend#readme"' \
-            package.json > package.json.tmp
-          mv package.json.tmp package.json
+          npm pkg set version="${{ steps.version.outputs.version }}"
+          npm pkg set repository.type="git"
+          npm pkg set repository.url="git+https://github.com/r33drichards/prompt-backend.git"
+          npm pkg set bugs.url="https://github.com/r33drichards/prompt-backend/issues"
+          npm pkg set homepage="https://github.com/r33drichards/prompt-backend#readme"
           cat package.json
-
-      - name: Install dependencies
-        working-directory: generated-client
-        run: npm install
-
-      - name: Build TypeScript client
-        working-directory: generated-client
-        run: |
-          if grep -q '"build"' package.json; then
-            npm run build
-          else
-            echo "No build script found, skipping build step"
-          fi
 
       - name: Publish to npm (main branch)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

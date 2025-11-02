@@ -56,13 +56,13 @@
             -i "$TEMP_DIR/openapi.json" \
             -g typescript-fetch \
             -o "$OUTPUT_DIR" \
-            --additional-properties=npmName=@r33drichards/prompt-backend-client,npmVersion=0.1.0,supportsES6=true,typescriptThreePlus=true
+            --additional-properties=npmName=@wholelottahoopla/prompt-backend-client,npmVersion=0.1.0,supportsES6=true,typescriptThreePlus=true
 
           echo "📦 Setting up npm package..."
           cd "$OUTPUT_DIR"
 
           # Add additional package.json metadata if needed
-          ${pkgs.jq}/bin/jq '.description = "TypeScript API client for prompt-backend" | .author = "r33drichards" | .license = "MIT"' package.json > package.json.tmp
+          ${pkgs.jq}/bin/jq '.description = "TypeScript API client for prompt-backend" | .author = "wholelottahoopla" | .license = "MIT"' package.json > package.json.tmp
           mv package.json.tmp package.json
 
           # Install dependencies
