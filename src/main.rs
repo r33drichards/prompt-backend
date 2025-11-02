@@ -4,6 +4,7 @@ extern crate rocket;
 use dotenv::dotenv;
 
 use crate::store::Store;
+use crate::db::establish_connection;
 
 use rocket_okapi::settings::UrlObject;
 use rocket_okapi::swagger_ui::make_swagger_ui;
@@ -12,6 +13,8 @@ use rocket_okapi::{openapi_get_routes, rapidoc::*, swagger_ui::*};
 use std::env;
 use tokio::sync::Mutex;
 
+mod db;
+mod entities;
 mod error;
 mod handlers;
 mod store;
@@ -30,14 +33,23 @@ async fn main() {
             handlers::items::list,
             handlers::items::update,
             handlers::items::delete,
+            handlers::sessions::create,
+            handlers::sessions::read,
+            handlers::sessions::list,
+            handlers::sessions::update,
+            handlers::sessions::delete,
         ](&settings);
         println!("{}", serde_json::to_string_pretty(&spec).unwrap());
         return;
     }
 
     let redis_url = env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let store = Store::new(redis_url.clone());
+    let db = establish_connection(&database_url)
+        .await
+        .expect("Failed to connect to database");
 
     let _ = rocket::build()
         .configure(rocket::Config {
@@ -46,6 +58,7 @@ async fn main() {
             ..rocket::Config::default()
         })
         .manage(Mutex::new(store))
+        .manage(db)
         .mount(
             "/",
             openapi_get_routes![
@@ -54,6 +67,11 @@ async fn main() {
                 handlers::items::list,
                 handlers::items::update,
                 handlers::items::delete,
+                handlers::sessions::create,
+                handlers::sessions::read,
+                handlers::sessions::list,
+                handlers::sessions::update,
+                handlers::sessions::delete,
             ],
         )
         .mount(

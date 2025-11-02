@@ -137,4 +137,30 @@ impl From<redis::RedisError> for Error {
     }
 }
 
+impl Error {
+    pub fn database_error(msg: String) -> Self {
+        Error {
+            err: "Database Error".to_owned(),
+            msg: Some(msg),
+            http_status_code: 500,
+        }
+    }
+
+    pub fn bad_request(msg: String) -> Self {
+        Error {
+            err: "Bad Request".to_owned(),
+            msg: Some(msg),
+            http_status_code: 400,
+        }
+    }
+
+    pub fn not_found(msg: String) -> Self {
+        Error {
+            err: "Not Found".to_owned(),
+            msg: Some(msg),
+            http_status_code: 404,
+        }
+    }
+}
+
 pub type OResult<T> = std::result::Result<rocket::serde::json::Json<T>, Error>;
