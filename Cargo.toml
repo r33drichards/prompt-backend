@@ -14,3 +14,7 @@ rocket_okapi = { version = "0.8.0", features = [ "swagger", "rapidoc" ] }
 schemars = { version = "0.8" }
 sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
 uuid = { version = "1.0", features = ["serde", "v4"] }
+
+# Pin base64ct to avoid edition 2024 requirement (not yet stable in Rust 1.84)
+[dependencies.base64ct]
+version = "=1.6.0"
