@@ -6,15 +6,36 @@ services:
     volumes:
       - redis_data:/data
 
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=prompt_backend
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   webserver:
     build:
       context: .
     ports:
       - "8000:8000"
     depends_on:
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       - REDIS_URL=redis://redis:6379/
+      - DATABASE_URL=postgres://postgres:postgres@postgres/prompt_backend
 
 volumes:
   redis_data:
+  postgres_data:
