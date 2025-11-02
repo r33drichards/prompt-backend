@@ -23,6 +23,7 @@ jobs:
     permissions:
       contents: read
       id-token: write  # Required for npm provenance
+      pull-requests: write  # Required to comment on PRs
 
     steps:
       - name: Checkout code
