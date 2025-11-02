@@ -3,10 +3,10 @@ name: Generate and Publish TypeScript SDK
 on:
   push:
     branches:
-      - main
+      - master
   pull_request:
     branches:
-      - main
+      - master
   workflow_dispatch:
     inputs:
       version:
@@ -54,7 +54,7 @@ jobs:
             SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
             VERSION="${BASE_VERSION}-beta.pr${PR_NUMBER}.${SHORT_SHA}"
           else
-            # For main branch, use the version from sdk/package.json
+            # For master branch, use the version from sdk/package.json
             VERSION="$BASE_VERSION"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -73,8 +73,8 @@ jobs:
         run: |
           nix run .#generateTypescriptClient generated-client
 
-      - name: Publish to npm (main branch)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Publish to npm (master branch)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         working-directory: generated-client
         run: |
           npm publish --access public --provenance
