@@ -16,3 +16,7 @@ sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-rustls
 sea-orm-migration = { version = "0.12", features = ["runtime-tokio-rustls", "sqlx-postgres"] }
 uuid = { version = "1.0", features = ["serde", "v4"] }
 migration = { path = "migration" }
+
+# Patch home crate to avoid edition2024 requirement
+[patch.crates-io]
+home = { version = "=0.5.9" }
