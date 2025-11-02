@@ -13,6 +13,9 @@ use rocket_okapi::{openapi_get_routes, rapidoc::*, swagger_ui::*};
 use std::env;
 use tokio::sync::Mutex;
 
+use migration::{Migrator, MigratorTrait};
+use sea_orm_migration::prelude::*;
+
 mod db;
 mod entities;
 mod error;
@@ -50,6 +53,13 @@ async fn main() {
     let db = establish_connection(&database_url)
         .await
         .expect("Failed to connect to database");
+
+    // Run database migrations
+    println!("Running database migrations...");
+    Migrator::up(&db, None)
+        .await
+        .expect("Failed to run database migrations");
+    println!("Database migrations completed successfully");
 
     let _ = rocket::build()
         .configure(rocket::Config {
