@@ -4,6 +4,8 @@ A production-ready template for building Rust web services with Redis storage, f
 
 - 🚀 **Rocket** web framework with automatic OpenAPI documentation
 - 📦 **Redis** for data persistence with an abstract store interface
+- 🗄️ **PostgreSQL** for relational data with SeaORM
+- ⚙️ **Apalis** background job processing with Redis and PostgreSQL backends
 - 🐳 **Docker** and Docker Compose for containerized deployment
 - ❄️ **Nix Flake** for reproducible development environments
 - ✅ **E2E tests** with GitHub Actions CI/CD
@@ -246,11 +248,64 @@ pub async fn create(
 }
 ```
 
+## Background Tasks
+
+The application includes an Apalis-based background job processing system with two task types:
+
+### Available Tasks
+
+1. **outbox-publisher**: Reads from PostgreSQL outbox table and publishes to Redis
+2. **session-handler**: Reads from Redis and processes session data
+
+### Running Background Tasks
+
+```bash
+# Run web server only
+cargo run -- --server
+
+# Run all background tasks only
+cargo run -- --bg-tasks -A
+
+# Run specific background tasks only
+cargo run -- --bg-tasks outbox-publisher session-handler
+
+# Run web server AND background tasks together
+cargo run -- --server --bg-tasks session-handler
+
+# Run web server AND all background tasks
+cargo run -- --server --bg-tasks -A
+
+# Print OpenAPI specification
+cargo run -- print-openapi
+```
+
+### CLI Options
+
+The CLI uses independent flags - specify which services to run:
+
+- `--server`: Run the web server
+- `--bg-tasks <TASKS>`: Run background tasks
+  - `-A` or `--all`: Run all available tasks
+  - Or specify task names: `outbox-publisher session-handler`
+- `print-openapi`: Print OpenAPI specification and exit
+
+**Note**: You must specify at least one service (`--server` and/or `--bg-tasks`). The flags are independent and can be combined.
+
+### Task Implementations
+
+Background tasks are located in `src/bg_tasks/`:
+
+- `outbox_publisher.rs`: Handles outbox pattern for reliable message publishing
+- `session_handler.rs`: Processes session-related jobs from Redis queue
+
+Each task can be customized by implementing the job handler function and registering it with the monitor.
+
 ## Configuration
 
 ### Environment Variables
 
 - `REDIS_URL`: Redis connection string (default: `redis://127.0.0.1/`)
+- `DATABASE_URL`: PostgreSQL connection string (required)
 - `ROCKET_ADDRESS`: Server bind address (default: `0.0.0.0`)
 - `ROCKET_PORT`: Server port (default: `8000`)
 

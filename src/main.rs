@@ -3,6 +3,7 @@ extern crate rocket;
 
 use clap::{Parser, Subcommand};
 use dotenv::dotenv;
+use tracing::info;
 
 use crate::store::Store;
 use crate::db::establish_connection;
@@ -15,6 +16,7 @@ use sea_orm_migration::prelude::*;
 
 use tokio::sync::Mutex;
 
+mod bg_tasks;
 mod db;
 mod entities;
 mod error;
@@ -28,14 +30,20 @@ mod store;
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+
+    /// Run the web server
+    #[arg(long)]
+    server: bool,
+
+    /// Enable background tasks. Use -A/--all to run all tasks, or specify task names
+    #[arg(long = "bg-tasks", value_name = "TASKS")]
+    bg_tasks: Vec<String>,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, PartialEq)]
 enum Commands {
     /// Print the OpenAPI specification in JSON format
     PrintOpenapi,
-    /// Run the server (default)
-    Serve,
 }
 
 /// Generate OpenAPI specification
@@ -57,24 +65,89 @@ fn generate_openapi_spec() -> String {
 }
 
 #[rocket::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     dotenv().ok();
+
+    // Initialize tracing
+    tracing_subscriber::fmt::init();
 
     let cli = Cli::parse();
 
+    // Handle print-openapi command
     match cli.command {
         Some(Commands::PrintOpenapi) => {
             println!("{}", generate_openapi_spec());
-            return;
+            return Ok(());
         }
-        Some(Commands::Serve) | None => {
-            // Run the server (default behavior)
-        }
+        _ => {}
     }
 
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
+    // Determine which background tasks to run (empty vec if none specified)
+    let bg_task_names: Vec<String> = if cli.bg_tasks.contains(&"-A".to_string())
+        || cli.bg_tasks.contains(&"--all".to_string())
+    {
+        bg_tasks::all_tasks()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect()
+    } else {
+        cli.bg_tasks
+    };
+
+    let mut handles = vec![];
+
+    // Spawn server if --server flag is present
+    if cli.server {
+        let server_redis_url = redis_url.clone();
+        let server_database_url = database_url.clone();
+
+        let server_handle = tokio::spawn(async move {
+            info!("Starting web server");
+            run_server(server_redis_url, server_database_url).await
+        });
+
+        handles.push(server_handle);
+    }
+
+    // Spawn background tasks if --bg-tasks flag is present
+    if !bg_task_names.is_empty() {
+        // Determine which connections are needed based on task names
+        let needs_redis = bg_task_names.iter().any(|t| t == bg_tasks::SESSION_HANDLER);
+        let needs_postgres = bg_task_names.iter().any(|t| t == bg_tasks::OUTBOX_PUBLISHER);
+
+        let task_redis_url = if needs_redis { Some(redis_url) } else { None };
+        let task_database_url = if needs_postgres { Some(database_url) } else { None };
+
+        let bg_tasks_handle = tokio::spawn(async move {
+            info!("Starting background tasks");
+            let task_context = bg_tasks::TaskContext::new(task_redis_url, task_database_url)
+                .await
+                .expect("Failed to create task context");
+            task_context.run_bg_tasks(bg_task_names).await
+        });
+
+        handles.push(bg_tasks_handle);
+    }
+
+    // If no services specified, error out
+    if handles.is_empty() {
+        eprintln!("No services specified. Use --server and/or --bg-tasks, or --help for usage.");
+        return Err(anyhow::anyhow!("No services specified"));
+    }
+
+    // Wait for all services to complete
+    for handle in handles {
+        handle.await??;
+    }
+
+    Ok(())
+}
+
+/// Run the Rocket web server
+async fn run_server(redis_url: String, database_url: String) -> anyhow::Result<()> {
     let store = Store::new(redis_url.clone());
     let db = establish_connection(&database_url)
         .await
@@ -133,7 +206,9 @@ async fn main() {
             }),
         )
         .launch()
-        .await;
+        .await?;
+
+    Ok(())
 }
 
 #[cfg(test)]
