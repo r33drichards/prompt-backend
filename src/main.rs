@@ -15,6 +15,7 @@ use sea_orm_migration::prelude::*;
 
 use tokio::sync::Mutex;
 
+mod bg_tasks;
 mod db;
 mod entities;
 mod error;
@@ -28,6 +29,10 @@ mod store;
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+
+    /// Enable background tasks. Use -A/--all to run all tasks, or specify task names
+    #[arg(long = "bg-tasks", value_name = "TASKS")]
+    bg_tasks: Vec<String>,
 }
 
 #[derive(Subcommand)]
@@ -57,24 +62,87 @@ fn generate_openapi_spec() -> String {
 }
 
 #[rocket::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     dotenv().ok();
+
+    // Initialize tracing
+    tracing_subscriber::fmt::init();
 
     let cli = Cli::parse();
 
+    // Handle print-openapi command
     match cli.command {
         Some(Commands::PrintOpenapi) => {
             println!("{}", generate_openapi_spec());
-            return;
+            return Ok(());
         }
-        Some(Commands::Serve) | None => {
-            // Run the server (default behavior)
-        }
+        _ => {}
     }
 
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
+    // Determine which background tasks to run
+    let bg_task_names: Vec<String> = if cli.bg_tasks.contains(&"-A".to_string())
+        || cli.bg_tasks.contains(&"--all".to_string())
+    {
+        bg_tasks::all_tasks()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect()
+    } else {
+        cli.bg_tasks
+    };
+
+    let should_run_server = match cli.command {
+        Some(Commands::Serve) => true,
+        None => bg_task_names.is_empty(), // Default: run server only if no bg tasks specified
+        _ => false,
+    };
+
+    let should_run_bg_tasks = !bg_task_names.is_empty();
+
+    // Run both server and background tasks if needed
+    if should_run_server && should_run_bg_tasks {
+        // Run both concurrently
+        let server_redis_url = redis_url.clone();
+        let server_database_url = database_url.clone();
+
+        let server_handle = tokio::spawn(async move {
+            run_server(server_redis_url, server_database_url).await
+        });
+
+        let bg_tasks_handle = tokio::spawn(async move {
+            bg_tasks::run_bg_tasks(bg_task_names, redis_url, database_url)
+                .await
+                .expect("Background tasks failed");
+        });
+
+        // Wait for both to complete (or shutdown signal)
+        tokio::select! {
+            _ = server_handle => {
+                println!("Server stopped");
+            }
+            _ = bg_tasks_handle => {
+                println!("Background tasks stopped");
+            }
+        }
+    } else if should_run_server {
+        // Run only server
+        run_server(redis_url, database_url).await?;
+    } else if should_run_bg_tasks {
+        // Run only background tasks
+        bg_tasks::run_bg_tasks(bg_task_names, redis_url, database_url).await?;
+    } else {
+        eprintln!("No operation specified. Use --help for usage information.");
+        return Err(anyhow::anyhow!("No operation specified"));
+    }
+
+    Ok(())
+}
+
+/// Run the Rocket web server
+async fn run_server(redis_url: String, database_url: String) -> anyhow::Result<()> {
     let store = Store::new(redis_url.clone());
     let db = establish_connection(&database_url)
         .await
@@ -133,7 +201,9 @@ async fn main() {
             }),
         )
         .launch()
-        .await;
+        .await?;
+
+    Ok(())
 }
 
 #[cfg(test)]
