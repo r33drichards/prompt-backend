@@ -17,3 +17,7 @@ features = [
   "runtime-tokio-rustls",
   "sqlx-postgres",
 ]
+
+# Pin home crate to avoid edition 2024 requirement (not yet stable in Rust 1.84)
+[dependencies.home]
+version = "=0.5.9"
