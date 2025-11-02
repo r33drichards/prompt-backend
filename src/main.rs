@@ -10,7 +10,7 @@ use rocket_okapi::settings::UrlObject;
 use rocket_okapi::swagger_ui::make_swagger_ui;
 use rocket_okapi::{openapi_get_routes, rapidoc::*, swagger_ui::*};
 
-use sea_orm::ConnectionTrait;
+use sea_orm_migration::prelude::*;
 
 use std::env;
 use tokio::sync::Mutex;
@@ -53,22 +53,12 @@ async fn main() {
         .await
         .expect("Failed to connect to database");
 
-    // Initialize database schema
-    println!("Initializing database schema...");
-    let create_session_table = r#"
-        CREATE TABLE IF NOT EXISTS session (
-            id UUID PRIMARY KEY,
-            messages JSONB,
-            inbox_status VARCHAR(50) NOT NULL,
-            sbx_config JSONB,
-            parent UUID
-        )
-    "#;
-
-    db.execute_unprepared(create_session_table)
+    // Run database migrations
+    println!("Running database migrations...");
+    migration::Migrator::up(&db, None)
         .await
-        .expect("Failed to create session table");
-    println!("Database schema initialized successfully");
+        .expect("Failed to run migrations");
+    println!("Migrations completed successfully");
 
     let _ = rocket::build()
         .configure(rocket::Config {
