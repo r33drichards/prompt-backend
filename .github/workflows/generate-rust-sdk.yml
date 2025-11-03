@@ -1,0 +1,374 @@
+name: Generate Rust SDK from Sandbox
+
+on:
+  workflow_dispatch:
+    inputs:
+      sandbox_tag:
+        description: 'Docker image tag for wholelottahoopla/sandbox (e.g., latest, v1.0.0)'
+        required: false
+        default: 'latest'
+      target_branch:
+        description: 'Target branch for the PR (defaults to main)'
+        required: false
+        default: 'main'
+
+jobs:
+  generate-rust-sdk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for proper branching
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Install progenitor
+        run: |
+          cargo install --locked progenitor-cli
+
+      - name: Pull and start sandbox container
+        run: |
+          echo "🐳 Pulling wholelottahoopla/sandbox:${{ github.event.inputs.sandbox_tag }}"
+          docker pull wholelottahoopla/sandbox:${{ github.event.inputs.sandbox_tag }}
+
+          echo "🚀 Starting sandbox container on port 8080"
+          docker run -d \
+            --name sandbox \
+            -p 8080:8080 \
+            wholelottahoopla/sandbox:${{ github.event.inputs.sandbox_tag }}
+
+      - name: Wait for sandbox server to be ready
+        run: |
+          echo "⏳ Waiting for sandbox server to be ready..."
+          max_attempts=30
+          attempt=0
+
+          while [ $attempt -lt $max_attempts ]; do
+            if curl -f http://localhost:8080/v1/openapi.json > /dev/null 2>&1; then
+              echo "✅ Server is ready!"
+              break
+            fi
+
+            attempt=$((attempt + 1))
+            echo "Attempt $attempt/$max_attempts - waiting 2 seconds..."
+            sleep 2
+          done
+
+          if [ $attempt -eq $max_attempts ]; then
+            echo "❌ Server failed to start within expected time"
+            docker logs sandbox
+            exit 1
+          fi
+
+      - name: Fetch OpenAPI specification
+        run: |
+          echo "📥 Fetching OpenAPI spec from http://localhost:8080/v1/openapi.json"
+          mkdir -p rust-sdk
+          curl -f http://localhost:8080/v1/openapi.json -o rust-sdk/openapi.json
+          echo "✅ OpenAPI spec downloaded to rust-sdk/openapi.json"
+
+          # Pretty print for verification
+          echo "📄 OpenAPI spec preview:"
+          cat rust-sdk/openapi.json | jq '.info' || cat rust-sdk/openapi.json | head -20
+
+      - name: Stop sandbox container
+        if: always()
+        run: |
+          docker stop sandbox || true
+          docker rm sandbox || true
+
+      - name: Create or update Rust SDK directory structure
+        run: |
+          # Create the rust-sdk directory if it doesn't exist
+          mkdir -p rust-sdk/src
+
+          # Create Cargo.toml if it doesn't exist
+          if [ ! -f rust-sdk/Cargo.toml ]; then
+            cat > rust-sdk/Cargo.toml <<'EOF'
+          [package]
+          name = "sandbox-client"
+          version = "0.1.0"
+          edition = "2021"
+
+          [dependencies]
+          progenitor-client = "0.8.0"
+          reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+          serde = { version = "1.0", features = ["derive"] }
+          serde_json = "1.0"
+          futures = "0.3"
+          tokio = { version = "1", features = ["full"] }
+
+          [build-dependencies]
+          progenitor = "0.8.0"
+          serde_json = "1.0"
+          syn = "2.0"
+          prettyplease = "0.2"
+          EOF
+            echo "✅ Created Cargo.toml"
+          fi
+
+          # Create build.rs for progenitor
+          cat > rust-sdk/build.rs <<'EOF'
+          fn main() {
+              let spec_path = std::env::var("OPENAPI_SPEC_PATH")
+                  .unwrap_or_else(|_| "openapi.json".to_string());
+
+              let file = std::fs::File::open(&spec_path)
+                  .unwrap_or_else(|e| panic!("Failed to open OpenAPI spec at {}: {}", spec_path, e));
+
+              let spec = serde_json::from_reader(file)
+                  .expect("Failed to parse OpenAPI spec");
+
+              let mut generator = progenitor::Generator::default();
+
+              let tokens = generator.generate_tokens(&spec)
+                  .expect("Failed to generate client code");
+
+              let ast = syn::parse2(tokens)
+                  .expect("Failed to parse generated code");
+
+              let content = prettyplease::unparse(&ast);
+
+              let out_dir = std::env::var("OUT_DIR").unwrap();
+              let dest_path = std::path::Path::new(&out_dir).join("codegen.rs");
+
+              std::fs::write(&dest_path, content)
+                  .expect("Failed to write generated code");
+
+              println!("cargo:rerun-if-changed={}", spec_path);
+          }
+          EOF
+          echo "✅ Created build.rs"
+
+          # Create lib.rs that includes the generated code
+          cat > rust-sdk/src/lib.rs <<'EOF'
+          //! Sandbox API Client
+          //!
+          //! This crate provides a Rust client for the Sandbox API.
+          //! The client is auto-generated from the OpenAPI specification.
+
+          #![allow(clippy::all)]
+          #![allow(unused_imports, dead_code)]
+
+          include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
+          EOF
+          echo "✅ Created lib.rs"
+
+          # Create README
+          cat > rust-sdk/README.md <<'EOF'
+          # Sandbox API Rust SDK
+
+          This is an auto-generated Rust SDK for the Sandbox API, created using [progenitor](https://github.com/oxidecomputer/progenitor).
+
+          ## Installation
+
+          Add this to your `Cargo.toml`:
+
+          ```toml
+          [dependencies]
+          sandbox-client = { path = "rust-sdk" }
+          ```
+
+          ## Usage
+
+          ```rust
+          use sandbox_client::Client;
+
+          #[tokio::main]
+          async fn main() -> Result<(), Box<dyn std::error::Error>> {
+              let client = Client::new("http://localhost:8080")?;
+
+              // Use the client to make API calls
+              // Example methods will depend on your API specification
+
+              Ok(())
+          }
+          ```
+
+          ## Generation
+
+          This SDK is automatically generated from the OpenAPI specification exposed by the Sandbox service.
+          To regenerate the SDK, run the GitHub Action workflow "Generate Rust SDK from Sandbox".
+
+          ## Documentation
+
+          Run `cargo doc --open` in the `rust-sdk` directory to view the generated documentation.
+          EOF
+          echo "✅ Created README.md"
+
+      - name: Generate Rust SDK with progenitor
+        run: |
+          cd rust-sdk
+
+          echo "🔨 Building Rust SDK with progenitor..."
+          cargo build --release 2>&1 | tee build.log || {
+            echo "❌ Build failed. Showing build log:"
+            cat build.log
+            exit 1
+          }
+
+          echo "✅ Rust SDK generated successfully!"
+
+          # Format the generated code
+          cargo fmt
+
+          echo "📦 Running clippy to check for issues..."
+          cargo clippy --all-targets --all-features -- -D warnings || {
+            echo "⚠️  Clippy found some issues, but continuing..."
+          }
+
+      - name: Verify generated SDK
+        run: |
+          cd rust-sdk
+          echo "📋 Generated SDK structure:"
+          find . -type f -name "*.rs" -o -name "Cargo.toml" -o -name "*.md"
+
+          echo ""
+          echo "📊 SDK Statistics:"
+          echo "Total Rust files: $(find . -name "*.rs" | wc -l)"
+          echo "Lines of code: $(find . -name "*.rs" -exec cat {} \; | wc -l)"
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create branch and commit changes
+        id: commit
+        run: |
+          BRANCH_NAME="rust-sdk/update-from-sandbox-${{ github.event.inputs.sandbox_tag }}-$(date +%Y%m%d-%H%M%S)"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+          git checkout -b "$BRANCH_NAME"
+
+          # Add all changes in rust-sdk directory (including openapi.json)
+          git add rust-sdk/
+
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            git commit -m "Generate Rust SDK from sandbox:${{ github.event.inputs.sandbox_tag }}
+
+          - Generated using progenitor from OpenAPI spec
+          - Source: wholelottahoopla/sandbox:${{ github.event.inputs.sandbox_tag }}
+          - Generated at: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          "
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes committed to branch $BRANCH_NAME"
+          fi
+
+      - name: Push changes
+        if: steps.commit.outputs.has_changes == 'true'
+        run: |
+          git push -u origin "${{ steps.commit.outputs.branch_name }}"
+
+      - name: Create Pull Request
+        if: steps.commit.outputs.has_changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { repo, owner } = context.repo;
+            const sandboxTag = '${{ github.event.inputs.sandbox_tag }}';
+            const branchName = '${{ steps.commit.outputs.branch_name }}';
+            const targetBranch = '${{ github.event.inputs.target_branch }}';
+
+            const prTitle = `Update Rust SDK from sandbox:${sandboxTag}`;
+            const prBody = `## 🦀 Rust SDK Update
+
+            This PR updates the Rust SDK generated from the Sandbox API.
+
+            ### Details
+            - **Source Image**: \`wholelottahoopla/sandbox:${sandboxTag}\`
+            - **Generator**: [progenitor](https://github.com/oxidecomputer/progenitor)
+            - **Generated**: ${new Date().toISOString()}
+
+            ### Changes
+            - ✅ Regenerated Rust client from OpenAPI specification
+            - ✅ Updated OpenAPI spec snapshot (\`rust-sdk/openapi.json\`)
+            - ✅ Formatted code with \`cargo fmt\`
+
+            ### Usage
+
+            To use this SDK in your project:
+
+            \`\`\`toml
+            [dependencies]
+            sandbox-client = { path = "rust-sdk" }
+            \`\`\`
+
+            \`\`\`rust
+            use sandbox_client::Client;
+
+            #[tokio::main]
+            async fn main() -> Result<(), Box<dyn std::error::Error>> {
+                let client = Client::new("http://localhost:8080")?;
+                // Use the generated client...
+                Ok(())
+            }
+            \`\`\`
+
+            ### Review Checklist
+            - [ ] Review generated API client structure
+            - [ ] Verify OpenAPI spec changes
+            - [ ] Test the SDK compiles successfully
+            - [ ] Check for any breaking changes
+
+            ---
+            *This PR was automatically created by the [Generate Rust SDK workflow](${context.serverUrl}/${owner}/${repo}/actions/workflows/generate-rust-sdk.yml)*
+            `;
+
+            try {
+              const result = await github.rest.pulls.create({
+                owner,
+                repo,
+                title: prTitle,
+                head: branchName,
+                base: targetBranch,
+                body: prBody,
+              });
+
+              console.log(`✅ Pull request created: ${result.data.html_url}`);
+
+              // Add labels if they exist
+              try {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: result.data.number,
+                  labels: ['automated', 'rust-sdk', 'dependencies']
+                });
+              } catch (e) {
+                console.log('Note: Could not add labels (they may not exist yet)');
+              }
+
+              return result.data.html_url;
+            } catch (error) {
+              console.error('Failed to create pull request:', error);
+              throw error;
+            }
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 🦀 Rust SDK Generation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Sandbox Image**: \`wholelottahoopla/sandbox:${{ github.event.inputs.sandbox_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: \`${{ steps.commit.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.commit.outputs.has_changes }}" == "true" ]; then
+            echo "✅ **Status**: SDK generated and PR created successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️  **Status**: No changes detected" >> $GITHUB_STEP_SUMMARY
+          fi
