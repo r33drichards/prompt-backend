@@ -121,97 +121,96 @@ jobs:
 
       - name: Create Pull Request
         if: steps.check_changes.outputs.has_changes == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { repo, owner } = context.repo;
-            const sandboxTag = '${{ github.event.inputs.sandbox_tag }}';
-            const branchName = '${{ steps.commit.outputs.branch_name }}';
-            const targetBranch = '${{ github.event.inputs.target_branch }}';
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SANDBOX_TAG="${{ github.event.inputs.sandbox_tag }}"
+          BRANCH_NAME="${{ steps.commit.outputs.branch_name }}"
+          TARGET_BRANCH="${{ github.event.inputs.target_branch }}"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
-            const prTitle = `Update Rust SDK OpenAPI spec from sandbox:${sandboxTag}`;
-            const prBody = `## 🦀 Rust SDK OpenAPI Spec Update
+          # Create PR body
+          cat > pr_body.md << 'EOF'
+          ## 🦀 Rust SDK OpenAPI Spec Update
 
-            This PR updates the OpenAPI specification for the Rust SDK.
+          This PR updates the OpenAPI specification for the Rust SDK.
 
-            ### Details
-            - **Source Image**: \`wholelottahoopla/sandbox:${sandboxTag}\`
-            - **Updated File**: \`agent-sandbox-sdk/openapi.json\`
-            - **Generated**: ${new Date().toISOString()}
+          ### Details
+          - **Source Image**: `wholelottahoopla/sandbox:${{ github.event.inputs.sandbox_tag }}`
+          - **Updated File**: `agent-sandbox-sdk/openapi.json`
+          - **Generated**: TIMESTAMP_PLACEHOLDER
 
-            ### What Changed
-            - ✅ Updated OpenAPI specification from sandbox container
-            - 🔨 SDK will be regenerated automatically on next \`cargo build\` via \`build.rs\`
+          ### What Changed
+          - ✅ Updated OpenAPI specification from sandbox container
+          - 🔨 SDK will be regenerated automatically on next `cargo build` via `build.rs`
 
-            ### How the SDK Works
+          ### How the SDK Works
 
-            The Rust SDK uses [progenitor](https://github.com/oxidecomputer/progenitor) to generate client code at build time. The \`build.rs\` script reads \`openapi.json\` and generates the Rust client code during compilation.
+          The Rust SDK uses [progenitor](https://github.com/oxidecomputer/progenitor) to generate client code at build time. The `build.rs` script reads `openapi.json` and generates the Rust client code during compilation.
 
-            **To test the updated SDK:**
+          **To test the updated SDK:**
 
-            \`\`\`bash
-            cd agent-sandbox-sdk
-            cargo build
-            cargo test
-            \`\`\`
+          ```bash
+          cd agent-sandbox-sdk
+          cargo build
+          cargo test
+          ```
 
-            ### Usage Example
+          ### Usage Example
 
-            \`\`\`toml
-            [dependencies]
-            sandbox-client = { path = "agent-sandbox-sdk" }
-            \`\`\`
+          ```toml
+          [dependencies]
+          sandbox-client = { path = "agent-sandbox-sdk" }
+          ```
 
-            \`\`\`rust
-            use sandbox_client::Client;
+          ```rust
+          use sandbox_client::Client;
 
-            #[tokio::main]
-            async fn main() -> Result<(), Box<dyn std::error::Error>> {
-                let client = Client::new("http://localhost:8080")?;
-                // Use the generated client methods...
-                Ok(())
-            }
-            \`\`\`
+          #[tokio::main]
+          async fn main() -> Result<(), Box<dyn std::error::Error>> {
+              let client = Client::new("http://localhost:8080")?;
+              // Use the generated client methods...
+              Ok(())
+          }
+          ```
 
-            ### Review Checklist
-            - [ ] Review OpenAPI spec changes
-            - [ ] Build the SDK locally to verify it compiles
-            - [ ] Check for any breaking changes in the API
-            - [ ] Test the SDK with the sandbox service
+          ### Review Checklist
+          - [ ] Review OpenAPI spec changes
+          - [ ] Build the SDK locally to verify it compiles
+          - [ ] Check for any breaking changes in the API
+          - [ ] Test the SDK with the sandbox service
 
-            ---
-            *This PR was automatically created by the [Update Rust SDK OpenAPI Spec workflow](${context.serverUrl}/${owner}/${repo}/actions/workflows/generate-rust-sdk.yml)*
-            `;
+          ---
+          *This PR was automatically created by the [Update Rust SDK OpenAPI Spec workflow](${{ github.server_url }}/${{ github.repository }}/actions/workflows/generate-rust-sdk.yml)*
+          EOF
 
-            try {
-              const result = await github.rest.pulls.create({
-                owner,
-                repo,
-                title: prTitle,
-                head: branchName,
-                base: targetBranch,
-                body: prBody,
-              });
+          # Replace placeholder with actual timestamp
+          sed -i "s/TIMESTAMP_PLACEHOLDER/$TIMESTAMP/g" pr_body.md
 
-              console.log(`✅ Pull request created: ${result.data.html_url}`);
+          # Create the PR using gh CLI
+          PR_URL=$(gh pr create \
+            --title "Update Rust SDK OpenAPI spec from sandbox:${SANDBOX_TAG}" \
+            --body-file pr_body.md \
+            --base "${TARGET_BRANCH}" \
+            --head "${BRANCH_NAME}" \
+            --label "automated,rust-sdk,dependencies" 2>&1 || echo "")
 
-              // Add labels if they exist
-              try {
-                await github.rest.issues.addLabels({
-                  owner,
-                  repo,
-                  issue_number: result.data.number,
-                  labels: ['automated', 'rust-sdk', 'dependencies']
-                });
-              } catch (e) {
-                console.log('Note: Could not add labels (they may not exist yet)');
-              }
+          if [ -n "$PR_URL" ] && [[ "$PR_URL" == http* ]]; then
+            echo "✅ Pull request created: $PR_URL"
+            echo "$PR_URL" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️  PR creation result: $PR_URL"
+            # Try without labels if they don't exist
+            PR_URL=$(gh pr create \
+              --title "Update Rust SDK OpenAPI spec from sandbox:${SANDBOX_TAG}" \
+              --body-file pr_body.md \
+              --base "${TARGET_BRANCH}" \
+              --head "${BRANCH_NAME}")
+            echo "✅ Pull request created: $PR_URL"
+            echo "$PR_URL" >> $GITHUB_STEP_SUMMARY
+          fi
 
-              return result.data.html_url;
-            } catch (error) {
-              console.error('Failed to create pull request:', error);
-              throw error;
-            }
+          rm pr_body.md
 
       - name: Summary
         if: always()
