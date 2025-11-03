@@ -120,8 +120,6 @@ pub async fn create(
     let git_repo: Option<String> = input.repo.clone();
     let prompt: Option<String> = None;
 
-
-
     // Generate title using Anthropic Haiku
     let title = anthropic::generate_session_title(
         git_repo.as_deref(),
@@ -137,7 +135,7 @@ pub async fn create(
     // Generate branch name 
     let generated_branch = anthropic::generate_branch_name(
         git_repo.as_deref(),
-        None,
+        target_branch,
         prompt.as_deref(),
         &id.to_string(),
     )
@@ -153,7 +151,7 @@ pub async fn create(
         inbox_status: Set(input.inbox_status.clone()),
         sbx_config: Set(input.sbx_config.clone()),
         parent: Set(parent),
-        branch: Set(input.branch.clone()),
+        branch: Set(generated_branch),
         repo: Set(git_repo),
         target_branch: Set(target_branch),
         title: Set(Some(title)),
