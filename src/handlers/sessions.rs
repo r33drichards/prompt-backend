@@ -117,36 +117,11 @@ pub async fn create(
     };
 
     // Use top-level fields (new approach), fallback to sbx_config for backward compatibility
-    let mut git_repo: Option<String> = input.repo.clone();
+    let git_repo: Option<String> = input.repo.clone();
     let mut target_branch: Option<String> = input.target_branch.clone();
-    let mut prompt: Option<String> = None;
+    let prompt: Option<String> = None;
 
-    // Fallback to sbx_config if top-level fields are not provided
-    if git_repo.is_none() || target_branch.is_none() || prompt.is_none() {
-        if let Some(config) = &input.sbx_config {
-            if let Some(obj) = config.as_object() {
-                if git_repo.is_none() {
-                    git_repo = obj.get("git_repo")
-                        .or_else(|| obj.get("repo"))
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                }
 
-                if target_branch.is_none() {
-                    target_branch = obj.get("target_branch")
-                        .or_else(|| obj.get("targetBranch"))
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                }
-
-                if prompt.is_none() {
-                    prompt = obj.get("prompt")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                }
-            }
-        }
-    }
 
     // Generate title using Anthropic Haiku
     let title = anthropic::generate_session_title(
