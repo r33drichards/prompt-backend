@@ -19,6 +19,8 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
     type Error = String;
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        tracing::debug!("AuthenticatedUser::from_request called");
+
         let jwks_cache = request
             .guard::<&State<JwksCache>>()
             .await
@@ -26,6 +28,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
             .ok_or("JWKS cache not available".to_string());
 
         if let Err(e) = jwks_cache {
+            tracing::error!("JWKS cache not available: {}", e);
             return Outcome::Error((Status::InternalServerError, e));
         }
 
@@ -33,6 +36,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
 
         let auth_header = request.headers().get_one("Authorization");
         if auth_header.is_none() {
+            tracing::warn!("Missing Authorization header");
             return Outcome::Error((
                 Status::Unauthorized,
                 "Missing Authorization header".to_string(),
@@ -40,7 +44,10 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         }
 
         let auth_header = auth_header.unwrap();
+        tracing::debug!("Authorization header: {}", &auth_header[..20.min(auth_header.len())]);
+
         if !auth_header.starts_with("Bearer ") {
+            tracing::warn!("Invalid Authorization header format: {}", auth_header);
             return Outcome::Error((
                 Status::Unauthorized,
                 "Invalid Authorization header format".to_string(),
@@ -50,12 +57,18 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         let token = &auth_header[7..];
 
         match jwks_cache.validate_token(token).await {
-            Ok(claims) => Outcome::Success(AuthenticatedUser {
-                user_id: claims.sub,
-                email: claims.email,
-                name: claims.name,
-            }),
-            Err(e) => Outcome::Error((Status::Unauthorized, e)),
+            Ok(claims) => {
+                tracing::info!("Token validated successfully for user: {}", claims.sub);
+                Outcome::Success(AuthenticatedUser {
+                    user_id: claims.sub,
+                    email: claims.email,
+                    name: claims.name,
+                })
+            },
+            Err(e) => {
+                tracing::error!("Token validation failed: {}", e);
+                Outcome::Error((Status::Unauthorized, e))
+            },
         }
     }
 }

@@ -168,9 +168,23 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
     jwks_cache.fetch_jwks().await.expect("Failed to fetch JWKS");
     println!("JWKS fetched successfully");
 
-    // Configure CORS to allow all origins
+    // Configure CORS to allow all origins, methods, and headers
     let cors = CorsOptions::default()
         .allowed_origins(AllowedOrigins::all())
+        .allowed_methods(
+            vec![
+                rocket::http::Method::Get,
+                rocket::http::Method::Post,
+                rocket::http::Method::Put,
+                rocket::http::Method::Delete,
+                rocket::http::Method::Options,
+            ]
+            .into_iter()
+            .map(From::from)
+            .collect(),
+        )
+        .allowed_headers(rocket_cors::AllowedHeaders::all())
+        .allow_credentials(true)
         .to_cors()
         .expect("Failed to create CORS fairing");
 
