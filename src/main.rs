@@ -5,7 +5,6 @@ use clap::{Parser, Subcommand};
 use dotenv::dotenv;
 use tracing::info;
 
-use crate::store::Store;
 use crate::db::establish_connection;
 
 use rocket_okapi::settings::UrlObject;
@@ -15,14 +14,11 @@ use rocket_cors::{AllowedOrigins, CorsOptions};
 
 use sea_orm_migration::prelude::*;
 
-use tokio::sync::Mutex;
-
 mod bg_tasks;
 mod db;
 mod entities;
 mod error;
 mod handlers;
-mod store;
 
 /// CLI application for the prompt backend server
 #[derive(Parser)]
@@ -51,11 +47,6 @@ enum Commands {
 fn generate_openapi_spec() -> String {
     let settings = rocket_okapi::settings::OpenApiSettings::new();
     let spec = rocket_okapi::openapi_spec![
-        handlers::items::create,
-        handlers::items::read,
-        handlers::items::list,
-        handlers::items::update,
-        handlers::items::delete,
         handlers::sessions::create,
         handlers::sessions::read,
         handlers::sessions::list,
@@ -148,8 +139,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 /// Run the Rocket web server
-async fn run_server(redis_url: String, database_url: String) -> anyhow::Result<()> {
-    let store = Store::new(redis_url.clone());
+async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<()> {
     let db = establish_connection(&database_url)
         .await
         .expect("Failed to connect to database");
@@ -174,16 +164,10 @@ async fn run_server(redis_url: String, database_url: String) -> anyhow::Result<(
             ..rocket::Config::default()
         })
         .attach(cors)
-        .manage(Mutex::new(store))
         .manage(db)
         .mount(
             "/",
             openapi_get_routes![
-                handlers::items::create,
-                handlers::items::read,
-                handlers::items::list,
-                handlers::items::update,
-                handlers::items::delete,
                 handlers::sessions::create,
                 handlers::sessions::read,
                 handlers::sessions::list,
