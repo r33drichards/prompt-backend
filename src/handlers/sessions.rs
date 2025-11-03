@@ -151,6 +151,7 @@ pub async fn create(
         target_branch: Set(Some(input.target_branch.clone())),
         title: Set(Some(title)),
         session_status: Set(SessionStatus::Active),
+        user_id: Set(String::new()), // TODO: Will be set from AuthenticatedUser in Task 7.1
         created_at: NotSet,
         updated_at: NotSet,
         deleted_at: Set(None),

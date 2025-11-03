@@ -14,6 +14,7 @@ use rocket_cors::{AllowedOrigins, CorsOptions};
 
 use sea_orm_migration::prelude::*;
 
+mod auth;
 mod bg_tasks;
 mod db;
 mod entities;
