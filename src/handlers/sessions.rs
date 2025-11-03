@@ -113,15 +113,13 @@ pub async fn create(
         None => None,
     };
 
-    // Use top-level fields (new approach), fallback to sbx_config for backward compatibility
-    let git_repo: Option<String> = input.repo.clone();
-    let prompt: Option<String> = None;
+    let prompt = "todo";
 
     // Generate title using Anthropic Haiku
     let title = anthropic::generate_session_title(
-        git_repo.as_deref(),
-        target_branch.as_deref(),
-        prompt.as_deref(),
+        &input.repo,
+        &input.target_branch,
+        &prompt,
     )
     .await
     .unwrap_or_else(|e| {
@@ -131,9 +129,9 @@ pub async fn create(
 
     // Generate branch name 
     let generated_branch = anthropic::generate_branch_name(
-        git_repo.as_deref(),
-        target_branch.as_deref(),
-        prompt.as_deref(),
+        &input.repo,
+        &input.target_branch,
+        &prompt,
         &id.to_string(),
     )
     .await
@@ -149,8 +147,8 @@ pub async fn create(
         sbx_config: Set(input.sbx_config.clone()),
         parent: Set(parent),
         branch: Set(Some(generated_branch)),
-        repo: Set(git_repo),
-        target_branch: Set(target_branch),
+        repo: Set(input.repo),
+        target_branch: Set(input.target_branch),
         title: Set(Some(title)),
         session_status: Set(SessionStatus::Active),
         created_at: NotSet,
