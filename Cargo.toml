@@ -1,3 +1,7 @@
+[workspace]
+members = ["agent-sandbox-sdk"]
+resolver = "2"
+
 [package]
 name = "rust-redis-webserver"
 version = "0.1.0"
@@ -25,6 +29,7 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { version = "0.11", features = ["json"] }
+sandbox-client = { path = "agent-sandbox-sdk" }
 
 # Pin base64ct to avoid edition 2024 requirement (not yet stable in Rust 1.84)
 [dependencies.base64ct]
