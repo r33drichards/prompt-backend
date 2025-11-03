@@ -72,13 +72,13 @@ jobs:
       - name: Fetch OpenAPI specification
         run: |
           echo "📥 Fetching OpenAPI spec from http://localhost:8080/v1/openapi.json"
-          mkdir -p rust-sdk
-          curl -f http://localhost:8080/v1/openapi.json -o rust-sdk/openapi.json
-          echo "✅ OpenAPI spec downloaded to rust-sdk/openapi.json"
+          mkdir -p agent-sandbox-sdk
+          curl -f http://localhost:8080/v1/openapi.json -o agent-sandbox-sdk/openapi.json
+          echo "✅ OpenAPI spec downloaded to agent-sandbox-sdk/openapi.json"
 
           # Pretty print for verification
           echo "📄 OpenAPI spec preview:"
-          cat rust-sdk/openapi.json | jq '.info' || cat rust-sdk/openapi.json | head -20
+          cat agent-sandbox-sdk/openapi.json | jq '.info' || cat agent-sandbox-sdk/openapi.json | head -20
 
       - name: Stop sandbox container
         if: always()
@@ -88,12 +88,12 @@ jobs:
 
       - name: Create or update Rust SDK directory structure
         run: |
-          # Create the rust-sdk directory if it doesn't exist
-          mkdir -p rust-sdk/src
+          # Create the agent-sandbox-sdk directory if it doesn't exist
+          mkdir -p agent-sandbox-sdk/src
 
           # Create Cargo.toml if it doesn't exist
-          if [ ! -f rust-sdk/Cargo.toml ]; then
-            cat > rust-sdk/Cargo.toml <<'EOF'
+          if [ ! -f agent-sandbox-sdk/Cargo.toml ]; then
+            cat > agent-sandbox-sdk/Cargo.toml <<'EOF'
           [package]
           name = "sandbox-client"
           version = "0.1.0"
@@ -117,7 +117,7 @@ jobs:
           fi
 
           # Create build.rs for progenitor
-          cat > rust-sdk/build.rs <<'EOF'
+          cat > agent-sandbox-sdk/build.rs <<'EOF'
           fn main() {
               let spec_path = std::env::var("OPENAPI_SPEC_PATH")
                   .unwrap_or_else(|_| "openapi.json".to_string());
@@ -150,7 +150,7 @@ jobs:
           echo "✅ Created build.rs"
 
           # Create lib.rs that includes the generated code
-          cat > rust-sdk/src/lib.rs <<'EOF'
+          cat > agent-sandbox-sdk/src/lib.rs <<'EOF'
           //! Sandbox API Client
           //!
           //! This crate provides a Rust client for the Sandbox API.
@@ -164,7 +164,7 @@ jobs:
           echo "✅ Created lib.rs"
 
           # Create README
-          cat > rust-sdk/README.md <<'EOF'
+          cat > agent-sandbox-sdk/README.md <<'EOF'
           # Sandbox API Rust SDK
 
           This is an auto-generated Rust SDK for the Sandbox API, created using [progenitor](https://github.com/oxidecomputer/progenitor).
@@ -175,7 +175,7 @@ jobs:
 
           ```toml
           [dependencies]
-          sandbox-client = { path = "rust-sdk" }
+          sandbox-client = { path = "agent-sandbox-sdk" }
           ```
 
           ## Usage
@@ -201,13 +201,13 @@ jobs:
 
           ## Documentation
 
-          Run `cargo doc --open` in the `rust-sdk` directory to view the generated documentation.
+          Run `cargo doc --open` in the `agent-sandbox-sdk` directory to view the generated documentation.
           EOF
           echo "✅ Created README.md"
 
       - name: Generate Rust SDK with progenitor
         run: |
-          cd rust-sdk
+          cd agent-sandbox-sdk
 
           echo "🔨 Building Rust SDK with progenitor..."
           cargo build --release 2>&1 | tee build.log || {
@@ -228,7 +228,7 @@ jobs:
 
       - name: Verify generated SDK
         run: |
-          cd rust-sdk
+          cd agent-sandbox-sdk
           echo "📋 Generated SDK structure:"
           find . -type f -name "*.rs" -o -name "Cargo.toml" -o -name "*.md"
 
@@ -250,8 +250,8 @@ jobs:
 
           git checkout -b "$BRANCH_NAME"
 
-          # Add all changes in rust-sdk directory (including openapi.json)
-          git add rust-sdk/
+          # Add all changes in agent-sandbox-sdk directory (including openapi.json)
+          git add agent-sandbox-sdk/
 
           # Check if there are changes to commit
           if git diff --staged --quiet; then
@@ -295,7 +295,7 @@ jobs:
 
             ### Changes
             - ✅ Regenerated Rust client from OpenAPI specification
-            - ✅ Updated OpenAPI spec snapshot (\`rust-sdk/openapi.json\`)
+            - ✅ Updated OpenAPI spec snapshot (\`agent-sandbox-sdk/openapi.json\`)
             - ✅ Formatted code with \`cargo fmt\`
 
             ### Usage
@@ -304,7 +304,7 @@ jobs:
 
             \`\`\`toml
             [dependencies]
-            sandbox-client = { path = "rust-sdk" }
+            sandbox-client = { path = "agent-sandbox-sdk" }
             \`\`\`
 
             \`\`\`rust
