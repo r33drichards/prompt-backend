@@ -13,12 +13,9 @@ use crate::services::anthropic;
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct CreateSessionInput {
     pub messages: Option<serde_json::Value>,
-    pub inbox_status: InboxStatus,
-    pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
-    pub branch: Option<String>,
-    pub repo: Option<String>,
-    pub target_branch: Option<String>,
+    pub repo: String,
+    pub target_branch: String,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -135,7 +132,7 @@ pub async fn create(
     // Generate branch name 
     let generated_branch = anthropic::generate_branch_name(
         git_repo.as_deref(),
-        target_branch,
+        target_branch.as_deref(),
         prompt.as_deref(),
         &id.to_string(),
     )
