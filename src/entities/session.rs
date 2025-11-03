@@ -16,6 +16,12 @@ pub struct Model {
     #[sea_orm(nullable)]
     pub parent: Option<Uuid>,
     #[sea_orm(nullable)]
+    pub branch: Option<String>,
+    #[sea_orm(nullable)]
+    pub repo: Option<String>,
+    #[sea_orm(nullable)]
+    pub target_branch: Option<String>,
+    #[sea_orm(nullable)]
     pub title: Option<String>,
     pub session_status: SessionStatus,
     pub created_at: DateTimeWithTimeZone,
