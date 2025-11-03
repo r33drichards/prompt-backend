@@ -135,22 +135,18 @@ pub async fn create(
         "Untitled Session".to_string()
     });
 
-    // Generate branch name if not provided
-    if target_branch.is_none() || target_branch.as_ref().map_or(true, |s| s.trim().is_empty()) {
-        let generated_branch = anthropic::generate_branch_name(
-            git_repo.as_deref(),
-            None,
-            prompt.as_deref(),
-            &id.to_string(),
-        )
-        .await
-        .unwrap_or_else(|e| {
-            tracing::warn!("Failed to generate branch name: {}", e);
-            format!("claude/session-{}", &id.to_string()[..24])
-        });
-
-        target_branch = Some(generated_branch);
-    }
+    // Generate branch name 
+    let generated_branch = anthropic::generate_branch_name(
+        git_repo.as_deref(),
+        None,
+        prompt.as_deref(),
+        &id.to_string(),
+    )
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!("Failed to generate branch name: {}", e);
+        format!("claude/session-{}", &id.to_string()[..24])
+    });
 
     let new_session = session::ActiveModel {
         id: Set(id),
