@@ -3,7 +3,7 @@ use rocket::State;
 use rocket_okapi::openapi;
 use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket::serde::{Deserialize, Serialize};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, QueryOrder};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, NotSet, QueryOrder};
 use uuid::Uuid;
 
 use crate::entities::session::{self, Entity as Session, Model as SessionModel, InboxStatus, SessionStatus};
@@ -34,6 +34,9 @@ pub struct SessionDto {
     pub parent: Option<String>,
     pub title: Option<String>,
     pub session_status: SessionStatus,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
 }
 
 impl From<SessionModel> for SessionDto {
@@ -46,6 +49,9 @@ impl From<SessionModel> for SessionDto {
             parent: model.parent.map(|p| p.to_string()),
             title: model.title,
             session_status: model.session_status,
+            created_at: model.created_at.to_string(),
+            updated_at: model.updated_at.to_string(),
+            deleted_at: model.deleted_at.map(|d| d.to_string()),
         }
     }
 }
@@ -139,6 +145,9 @@ pub async fn create(
         parent: Set(parent),
         title: Set(Some(title)),
         session_status: Set(SessionStatus::Active),
+        created_at: NotSet,
+        updated_at: NotSet,
+        deleted_at: Set(None),
     };
 
     match new_session.insert(db.inner()).await {
