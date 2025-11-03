@@ -410,6 +410,29 @@ Background tasks are located in `src/bg_tasks/`:
 
 Each task can be customized by implementing the job handler function and registering it with the monitor.
 
+## OAuth Authentication
+
+This application uses Keycloak for OAuth 2.0 authentication.
+
+### Environment Variables
+
+```bash
+KEYCLOAK_ISSUER=https://keycloak-production-1100.up.railway.app/realms/oauth2-realm
+KEYCLOAK_JWKS_URI=https://keycloak-production-1100.up.railway.app/realms/oauth2-realm/protocol/openid-connect/certs
+```
+
+### Protected Endpoints
+
+All `/sessions/*` endpoints require a valid JWT Bearer token in the Authorization header:
+
+```bash
+Authorization: Bearer <your-jwt-token>
+```
+
+### Unprotected Endpoints
+
+- `GET /health` - Health check endpoint (no authentication required)
+
 ## Configuration
 
 ### Environment Variables
@@ -418,6 +441,8 @@ Each task can be customized by implementing the job handler function and registe
 - `DATABASE_URL`: PostgreSQL connection string (required)
 - `ROCKET_ADDRESS`: Server bind address (default: `0.0.0.0`)
 - `ROCKET_PORT`: Server port (default: `8000`)
+- `KEYCLOAK_ISSUER`: Keycloak OAuth issuer URL (required for authentication)
+- `KEYCLOAK_JWKS_URI`: Keycloak JWKS endpoint URL (required for JWT validation)
 
 ### Using a .env File
 
