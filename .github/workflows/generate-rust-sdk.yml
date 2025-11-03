@@ -1,4 +1,4 @@
-name: Generate Rust SDK from Sandbox
+name: Update Rust SDK OpenAPI Spec
 
 on:
   workflow_dispatch:
@@ -8,12 +8,12 @@ on:
         required: false
         default: 'latest'
       target_branch:
-        description: 'Target branch for the PR (defaults to main)'
+        description: 'Target branch for the PR (defaults to master)'
         required: false
-        default: 'main'
+        default: 'master'
 
 jobs:
-  generate-rust-sdk:
+  update-openapi-spec:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,16 +24,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch all history for proper branching
-
-      - name: Set up Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-
-      - name: Install progenitor
-        run: |
-          cargo install --locked progenitor-cli
 
       - name: Pull and start sandbox container
         run: |
@@ -69,12 +59,11 @@ jobs:
             exit 1
           fi
 
-      - name: Fetch OpenAPI specification
+      - name: Fetch and update OpenAPI specification
         run: |
           echo "📥 Fetching OpenAPI spec from http://localhost:8080/v1/openapi.json"
-          mkdir -p agent-sandbox-sdk
           curl -f http://localhost:8080/v1/openapi.json -o agent-sandbox-sdk/openapi.json
-          echo "✅ OpenAPI spec downloaded to agent-sandbox-sdk/openapi.json"
+          echo "✅ OpenAPI spec updated at agent-sandbox-sdk/openapi.json"
 
           # Pretty print for verification
           echo "📄 OpenAPI spec preview:"
@@ -86,195 +75,52 @@ jobs:
           docker stop sandbox || true
           docker rm sandbox || true
 
-      - name: Create or update Rust SDK directory structure
+      - name: Check for changes
+        id: check_changes
         run: |
-          # Create the agent-sandbox-sdk directory if it doesn't exist
-          mkdir -p agent-sandbox-sdk/src
-
-          # Create Cargo.toml if it doesn't exist
-          if [ ! -f agent-sandbox-sdk/Cargo.toml ]; then
-            cat > agent-sandbox-sdk/Cargo.toml <<'EOF'
-          [package]
-          name = "sandbox-client"
-          version = "0.1.0"
-          edition = "2021"
-
-          [dependencies]
-          progenitor-client = "0.8.0"
-          reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
-          serde = { version = "1.0", features = ["derive"] }
-          serde_json = "1.0"
-          futures = "0.3"
-          tokio = { version = "1", features = ["full"] }
-
-          [build-dependencies]
-          progenitor = "0.8.0"
-          serde_json = "1.0"
-          syn = "2.0"
-          prettyplease = "0.2"
-          EOF
-            echo "✅ Created Cargo.toml"
+          if git diff --quiet agent-sandbox-sdk/openapi.json; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  No changes detected in openapi.json"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected in openapi.json"
+            echo ""
+            echo "📊 Diff summary:"
+            git diff --stat agent-sandbox-sdk/openapi.json
           fi
 
-          # Create build.rs for progenitor
-          cat > agent-sandbox-sdk/build.rs <<'EOF'
-          fn main() {
-              let spec_path = std::env::var("OPENAPI_SPEC_PATH")
-                  .unwrap_or_else(|_| "openapi.json".to_string());
-
-              let file = std::fs::File::open(&spec_path)
-                  .unwrap_or_else(|e| panic!("Failed to open OpenAPI spec at {}: {}", spec_path, e));
-
-              let spec = serde_json::from_reader(file)
-                  .expect("Failed to parse OpenAPI spec");
-
-              let mut generator = progenitor::Generator::default();
-
-              let tokens = generator.generate_tokens(&spec)
-                  .expect("Failed to generate client code");
-
-              let ast = syn::parse2(tokens)
-                  .expect("Failed to parse generated code");
-
-              let content = prettyplease::unparse(&ast);
-
-              let out_dir = std::env::var("OUT_DIR").unwrap();
-              let dest_path = std::path::Path::new(&out_dir).join("codegen.rs");
-
-              std::fs::write(&dest_path, content)
-                  .expect("Failed to write generated code");
-
-              println!("cargo:rerun-if-changed={}", spec_path);
-          }
-          EOF
-          echo "✅ Created build.rs"
-
-          # Create lib.rs that includes the generated code
-          cat > agent-sandbox-sdk/src/lib.rs <<'EOF'
-          //! Sandbox API Client
-          //!
-          //! This crate provides a Rust client for the Sandbox API.
-          //! The client is auto-generated from the OpenAPI specification.
-
-          #![allow(clippy::all)]
-          #![allow(unused_imports, dead_code)]
-
-          include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
-          EOF
-          echo "✅ Created lib.rs"
-
-          # Create README
-          cat > agent-sandbox-sdk/README.md <<'EOF'
-          # Sandbox API Rust SDK
-
-          This is an auto-generated Rust SDK for the Sandbox API, created using [progenitor](https://github.com/oxidecomputer/progenitor).
-
-          ## Installation
-
-          Add this to your `Cargo.toml`:
-
-          ```toml
-          [dependencies]
-          sandbox-client = { path = "agent-sandbox-sdk" }
-          ```
-
-          ## Usage
-
-          ```rust
-          use sandbox_client::Client;
-
-          #[tokio::main]
-          async fn main() -> Result<(), Box<dyn std::error::Error>> {
-              let client = Client::new("http://localhost:8080")?;
-
-              // Use the client to make API calls
-              // Example methods will depend on your API specification
-
-              Ok(())
-          }
-          ```
-
-          ## Generation
-
-          This SDK is automatically generated from the OpenAPI specification exposed by the Sandbox service.
-          To regenerate the SDK, run the GitHub Action workflow "Generate Rust SDK from Sandbox".
-
-          ## Documentation
-
-          Run `cargo doc --open` in the `agent-sandbox-sdk` directory to view the generated documentation.
-          EOF
-          echo "✅ Created README.md"
-
-      - name: Generate Rust SDK with progenitor
-        run: |
-          cd agent-sandbox-sdk
-
-          echo "🔨 Building Rust SDK with progenitor..."
-          cargo build --release 2>&1 | tee build.log || {
-            echo "❌ Build failed. Showing build log:"
-            cat build.log
-            exit 1
-          }
-
-          echo "✅ Rust SDK generated successfully!"
-
-          # Format the generated code
-          cargo fmt
-
-          echo "📦 Running clippy to check for issues..."
-          cargo clippy --all-targets --all-features -- -D warnings || {
-            echo "⚠️  Clippy found some issues, but continuing..."
-          }
-
-      - name: Verify generated SDK
-        run: |
-          cd agent-sandbox-sdk
-          echo "📋 Generated SDK structure:"
-          find . -type f -name "*.rs" -o -name "Cargo.toml" -o -name "*.md"
-
-          echo ""
-          echo "📊 SDK Statistics:"
-          echo "Total Rust files: $(find . -name "*.rs" | wc -l)"
-          echo "Lines of code: $(find . -name "*.rs" -exec cat {} \; | wc -l)"
-
       - name: Configure Git
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Create branch and commit changes
+        if: steps.check_changes.outputs.has_changes == 'true'
         id: commit
         run: |
-          BRANCH_NAME="rust-sdk/update-from-sandbox-${{ github.event.inputs.sandbox_tag }}-$(date +%Y%m%d-%H%M%S)"
+          BRANCH_NAME="rust-sdk/update-openapi-${{ github.event.inputs.sandbox_tag }}-$(date +%Y%m%d-%H%M%S)"
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
           git checkout -b "$BRANCH_NAME"
+          git add agent-sandbox-sdk/openapi.json
 
-          # Add all changes in agent-sandbox-sdk directory (including openapi.json)
-          git add agent-sandbox-sdk/
+          git commit -m "Update OpenAPI spec from sandbox:${{ github.event.inputs.sandbox_tag }}
 
-          # Check if there are changes to commit
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          else
-            git commit -m "Generate Rust SDK from sandbox:${{ github.event.inputs.sandbox_tag }}
-
-          - Generated using progenitor from OpenAPI spec
           - Source: wholelottahoopla/sandbox:${{ github.event.inputs.sandbox_tag }}
-          - Generated at: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - Updated at: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - Rust SDK will be regenerated on next build via build.rs
           "
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "✅ Changes committed to branch $BRANCH_NAME"
-          fi
+
+          echo "✅ Changes committed to branch $BRANCH_NAME"
 
       - name: Push changes
-        if: steps.commit.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           git push -u origin "${{ steps.commit.outputs.branch_name }}"
 
       - name: Create Pull Request
-        if: steps.commit.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -283,24 +129,33 @@ jobs:
             const branchName = '${{ steps.commit.outputs.branch_name }}';
             const targetBranch = '${{ github.event.inputs.target_branch }}';
 
-            const prTitle = `Update Rust SDK from sandbox:${sandboxTag}`;
-            const prBody = `## 🦀 Rust SDK Update
+            const prTitle = `Update Rust SDK OpenAPI spec from sandbox:${sandboxTag}`;
+            const prBody = `## 🦀 Rust SDK OpenAPI Spec Update
 
-            This PR updates the Rust SDK generated from the Sandbox API.
+            This PR updates the OpenAPI specification for the Rust SDK.
 
             ### Details
             - **Source Image**: \`wholelottahoopla/sandbox:${sandboxTag}\`
-            - **Generator**: [progenitor](https://github.com/oxidecomputer/progenitor)
+            - **Updated File**: \`agent-sandbox-sdk/openapi.json\`
             - **Generated**: ${new Date().toISOString()}
 
-            ### Changes
-            - ✅ Regenerated Rust client from OpenAPI specification
-            - ✅ Updated OpenAPI spec snapshot (\`agent-sandbox-sdk/openapi.json\`)
-            - ✅ Formatted code with \`cargo fmt\`
+            ### What Changed
+            - ✅ Updated OpenAPI specification from sandbox container
+            - 🔨 SDK will be regenerated automatically on next \`cargo build\` via \`build.rs\`
 
-            ### Usage
+            ### How the SDK Works
 
-            To use this SDK in your project:
+            The Rust SDK uses [progenitor](https://github.com/oxidecomputer/progenitor) to generate client code at build time. The \`build.rs\` script reads \`openapi.json\` and generates the Rust client code during compilation.
+
+            **To test the updated SDK:**
+
+            \`\`\`bash
+            cd agent-sandbox-sdk
+            cargo build
+            cargo test
+            \`\`\`
+
+            ### Usage Example
 
             \`\`\`toml
             [dependencies]
@@ -313,19 +168,19 @@ jobs:
             #[tokio::main]
             async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let client = Client::new("http://localhost:8080")?;
-                // Use the generated client...
+                // Use the generated client methods...
                 Ok(())
             }
             \`\`\`
 
             ### Review Checklist
-            - [ ] Review generated API client structure
-            - [ ] Verify OpenAPI spec changes
-            - [ ] Test the SDK compiles successfully
-            - [ ] Check for any breaking changes
+            - [ ] Review OpenAPI spec changes
+            - [ ] Build the SDK locally to verify it compiles
+            - [ ] Check for any breaking changes in the API
+            - [ ] Test the SDK with the sandbox service
 
             ---
-            *This PR was automatically created by the [Generate Rust SDK workflow](${context.serverUrl}/${owner}/${repo}/actions/workflows/generate-rust-sdk.yml)*
+            *This PR was automatically created by the [Update Rust SDK OpenAPI Spec workflow](${context.serverUrl}/${owner}/${repo}/actions/workflows/generate-rust-sdk.yml)*
             `;
 
             try {
@@ -361,14 +216,17 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "## 🦀 Rust SDK Generation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🦀 Rust SDK OpenAPI Spec Update Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Sandbox Image**: \`wholelottahoopla/sandbox:${{ github.event.inputs.sandbox_tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch**: \`${{ steps.commit.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ "${{ steps.commit.outputs.has_changes }}" == "true" ]; then
-            echo "✅ **Status**: SDK generated and PR created successfully" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.check_changes.outputs.has_changes }}" == "true" ]; then
+            echo "**Branch**: \`${{ steps.commit.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Status**: OpenAPI spec updated and PR created successfully" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The Rust SDK will be regenerated automatically on the next build." >> $GITHUB_STEP_SUMMARY
           else
-            echo "ℹ️  **Status**: No changes detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️  **Status**: No changes detected in OpenAPI spec" >> $GITHUB_STEP_SUMMARY
           fi
