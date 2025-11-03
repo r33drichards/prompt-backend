@@ -3,12 +3,13 @@ use rocket::State;
 use rocket_okapi::openapi;
 use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket::serde::{Deserialize, Serialize};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, NotSet, QueryOrder};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, NotSet, QueryOrder, QueryFilter, ColumnTrait};
 use uuid::Uuid;
 
 use crate::entities::session::{self, Entity as Session, Model as SessionModel, InboxStatus, SessionStatus};
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
+use crate::auth::AuthenticatedUser;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct CreateSessionInput {
@@ -102,6 +103,7 @@ pub struct DeleteSessionOutput {
 #[openapi]
 #[post("/sessions", data = "<input>")]
 pub async fn create(
+    user: AuthenticatedUser,
     db: &State<DatabaseConnection>,
     input: Json<CreateSessionInput>,
 ) -> OResult<CreateSessionOutput> {
@@ -151,7 +153,7 @@ pub async fn create(
         target_branch: Set(Some(input.target_branch.clone())),
         title: Set(Some(title)),
         session_status: Set(SessionStatus::Active),
-        user_id: Set(String::new()), // TODO: Will be set from AuthenticatedUser in Task 7.1
+        user_id: Set(user.user_id.clone()),
         created_at: NotSet,
         updated_at: NotSet,
         deleted_at: Set(None),
@@ -171,13 +173,18 @@ pub async fn create(
 #[openapi]
 #[get("/sessions/<id>")]
 pub async fn read(
+    user: AuthenticatedUser,
     db: &State<DatabaseConnection>,
     id: String,
 ) -> OResult<ReadSessionOutput> {
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| Error::bad_request("Invalid UUID format".to_string()))?;
 
-    match Session::find_by_id(uuid).one(db.inner()).await {
+    match Session::find_by_id(uuid)
+        .filter(session::Column::UserId.eq(&user.user_id))
+        .one(db.inner())
+        .await
+    {
         Ok(Some(session)) => Ok(Json(ReadSessionOutput {
             session: session.into()
         })),
@@ -189,8 +196,12 @@ pub async fn read(
 /// List all sessions
 #[openapi]
 #[get("/sessions")]
-pub async fn list(db: &State<DatabaseConnection>) -> OResult<ListSessionsOutput> {
+pub async fn list(
+    user: AuthenticatedUser,
+    db: &State<DatabaseConnection>,
+) -> OResult<ListSessionsOutput> {
     match Session::find()
+        .filter(session::Column::UserId.eq(&user.user_id))
         .order_by_asc(session::Column::Id)
         .all(db.inner())
         .await
@@ -206,6 +217,7 @@ pub async fn list(db: &State<DatabaseConnection>) -> OResult<ListSessionsOutput>
 #[openapi]
 #[put("/sessions/<id>", data = "<input>")]
 pub async fn update(
+    user: AuthenticatedUser,
     db: &State<DatabaseConnection>,
     id: String,
     input: Json<UpdateSessionInput>,
@@ -219,8 +231,9 @@ pub async fn update(
         None => None,
     };
 
-    // First check if the session exists
+    // Verify session exists and belongs to user
     let existing_session = Session::find_by_id(uuid)
+        .filter(session::Column::UserId.eq(&user.user_id))
         .one(db.inner())
         .await
         .map_err(|e| Error::database_error(e.to_string()))?
@@ -254,14 +267,16 @@ pub async fn update(
 #[openapi]
 #[delete("/sessions/<id>")]
 pub async fn delete(
+    user: AuthenticatedUser,
     db: &State<DatabaseConnection>,
     id: String,
 ) -> OResult<DeleteSessionOutput> {
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| Error::bad_request("Invalid UUID format".to_string()))?;
 
-    // First check if the session exists
+    // Verify session exists and belongs to user before deleting
     let existing_session = Session::find_by_id(uuid)
+        .filter(session::Column::UserId.eq(&user.user_id))
         .one(db.inner())
         .await
         .map_err(|e| Error::database_error(e.to_string()))?

@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 use dotenv::dotenv;
 use tracing::info;
 
-use crate::auth::{AuthenticatedUser, JwksCache};
+use crate::auth::JwksCache;
 use crate::db::establish_connection;
 
 use rocket_okapi::settings::UrlObject;

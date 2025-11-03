@@ -1,6 +1,9 @@
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::State;
+use rocket_okapi::request::{OpenApiFromRequest, RequestHeaderInput};
+use rocket_okapi::gen::OpenApiGenerator;
+use rocket_okapi::okapi::openapi3::{Responses, SecurityRequirement, SecurityScheme, SecuritySchemeData};
 
 use super::jwks::JwksCache;
 
@@ -54,5 +57,33 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
             }),
             Err(e) => Outcome::Error((Status::Unauthorized, e)),
         }
+    }
+}
+
+impl<'a> OpenApiFromRequest<'a> for AuthenticatedUser {
+    fn from_request_input(
+        _gen: &mut OpenApiGenerator,
+        _name: String,
+        _required: bool,
+    ) -> rocket_okapi::Result<RequestHeaderInput> {
+        let mut security_req = SecurityRequirement::new();
+        security_req.insert("Bearer".to_string(), vec![]);
+
+        Ok(RequestHeaderInput::Security(
+            "Bearer".to_string(),
+            SecurityScheme {
+                description: Some("JWT Bearer token from Keycloak".to_string()),
+                data: SecuritySchemeData::Http {
+                    scheme: "bearer".to_string(),
+                    bearer_format: Some("JWT".to_string()),
+                },
+                extensions: Default::default(),
+            },
+            security_req,
+        ))
+    }
+
+    fn get_responses(_gen: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
+        Ok(Responses::default())
     }
 }
