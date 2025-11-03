@@ -13,12 +13,9 @@ use crate::services::anthropic;
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct CreateSessionInput {
     pub messages: Option<serde_json::Value>,
-    pub inbox_status: InboxStatus,
-    pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
-    pub branch: Option<String>,
-    pub repo: Option<String>,
-    pub target_branch: Option<String>,
+    pub repo: String,
+    pub target_branch: String,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -116,43 +113,13 @@ pub async fn create(
         None => None,
     };
 
-    // Use top-level fields (new approach), fallback to sbx_config for backward compatibility
-    let mut git_repo: Option<String> = input.repo.clone();
-    let mut target_branch: Option<String> = input.target_branch.clone();
-    let mut prompt: Option<String> = None;
-
-    // Fallback to sbx_config if top-level fields are not provided
-    if git_repo.is_none() || target_branch.is_none() || prompt.is_none() {
-        if let Some(config) = &input.sbx_config {
-            if let Some(obj) = config.as_object() {
-                if git_repo.is_none() {
-                    git_repo = obj.get("git_repo")
-                        .or_else(|| obj.get("repo"))
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                }
-
-                if target_branch.is_none() {
-                    target_branch = obj.get("target_branch")
-                        .or_else(|| obj.get("targetBranch"))
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                }
-
-                if prompt.is_none() {
-                    prompt = obj.get("prompt")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                }
-            }
-        }
-    }
+    let prompt = "todo";
 
     // Generate title using Anthropic Haiku
     let title = anthropic::generate_session_title(
-        git_repo.as_deref(),
-        target_branch.as_deref(),
-        prompt.as_deref(),
+        &input.repo,
+        &input.target_branch,
+        &prompt,
     )
     .await
     .unwrap_or_else(|e| {
@@ -160,32 +127,28 @@ pub async fn create(
         "Untitled Session".to_string()
     });
 
-    // Generate branch name if not provided
-    if target_branch.is_none() || target_branch.as_ref().map_or(true, |s| s.trim().is_empty()) {
-        let generated_branch = anthropic::generate_branch_name(
-            git_repo.as_deref(),
-            None,
-            prompt.as_deref(),
-            &id.to_string(),
-        )
-        .await
-        .unwrap_or_else(|e| {
-            tracing::warn!("Failed to generate branch name: {}", e);
-            format!("claude/session-{}", &id.to_string()[..24])
-        });
-
-        target_branch = Some(generated_branch);
-    }
+    // Generate branch name 
+    let generated_branch = anthropic::generate_branch_name(
+        &input.repo,
+        &input.target_branch,
+        &prompt,
+        &id.to_string(),
+    )
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!("Failed to generate branch name: {}", e);
+        format!("claude/session-{}", &id.to_string()[..24])
+    });
 
     let new_session = session::ActiveModel {
         id: Set(id),
         messages: Set(input.messages.clone()),
-        inbox_status: Set(input.inbox_status.clone()),
-        sbx_config: Set(input.sbx_config.clone()),
+        inbox_status: Set(InboxStatus::Active),
+        sbx_config: Set(None),
         parent: Set(parent),
-        branch: Set(input.branch.clone()),
-        repo: Set(git_repo),
-        target_branch: Set(target_branch),
+        branch: Set(Some(generated_branch)),
+        repo: Set(Some(input.repo.clone())),
+        target_branch: Set(Some(input.target_branch.clone())),
         title: Set(Some(title)),
         session_status: Set(SessionStatus::Active),
         created_at: NotSet,
