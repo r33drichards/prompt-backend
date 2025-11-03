@@ -88,7 +88,9 @@ impl JwksCache {
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_issuer(&[&self.issuer]);
         validation.validate_exp = true;
-        validation.validate_aud = false; // Don't validate audience - token has aud:"account" which is Keycloak-specific
+        // Accept both Keycloak's default "account" audience and our custom "prompt-backend" audience
+        // TODO: Once Keycloak is configured to include "prompt-backend", remove "account" from this list
+        validation.set_audience(&["account", "prompt-backend"]);
 
         let token_data = decode::<Claims>(token, &decoding_key, &validation)
             .map_err(|e| format!("Token validation failed: {}", e))?;
