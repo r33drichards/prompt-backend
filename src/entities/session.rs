@@ -15,6 +15,8 @@ pub struct Model {
     pub sbx_config: Option<Json>,
     #[sea_orm(nullable)]
     pub parent: Option<Uuid>,
+    #[sea_orm(nullable)]
+    pub title: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
