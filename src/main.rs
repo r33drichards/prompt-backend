@@ -111,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
     // Spawn background tasks if --bg-tasks flag is present
     if !bg_task_names.is_empty() {
         // Determine which connections are needed based on task names
-        let needs_redis = bg_task_names.iter().any(|t| t == bg_tasks::SESSION_HANDLER);
+        let needs_redis = bg_task_names.iter().any(|t| t == bg_tasks::SESSION_HANDLER || t == bg_tasks::OUTBOX_PUBLISHER);
         let needs_postgres = bg_task_names.iter().any(|t| t == bg_tasks::OUTBOX_PUBLISHER);
 
         let task_redis_url = if needs_redis { Some(redis_url) } else { None };

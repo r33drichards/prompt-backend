@@ -5,7 +5,10 @@ use anyhow::Result;
 use apalis::prelude::*;
 use apalis_redis::RedisStorage;
 use apalis_sql::postgres::{PgListen, PgPool, PostgresStorage};
+use sea_orm::DatabaseConnection;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 use tracing::info;
 
 /// Available background task names
@@ -21,6 +24,7 @@ pub fn all_tasks() -> Vec<&'static str> {
 pub struct TaskContext {
     pub redis_url: Option<String>,
     pub db: Option<PgPool>,
+    pub sea_orm_db: Option<DatabaseConnection>,
 }
 
 impl TaskContext {
@@ -29,9 +33,9 @@ impl TaskContext {
         redis_url: Option<String>,
         database_url: Option<String>,
     ) -> Result<Self> {
-        let db = if let Some(url) = database_url {
+        let db = if let Some(url) = &database_url {
             Some(
-                PgPool::connect(&url)
+                PgPool::connect(url)
                     .await
                     .map_err(|e| anyhow::anyhow!("Failed to connect to PostgreSQL: {}", e))?,
             )
@@ -39,7 +43,17 @@ impl TaskContext {
             None
         };
 
-        Ok(Self { redis_url, db })
+        let sea_orm_db = if let Some(url) = database_url {
+            Some(
+                crate::db::establish_connection(&url)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to connect to PostgreSQL with SeaORM: {}", e))?,
+            )
+        } else {
+            None
+        };
+
+        Ok(Self { redis_url, db, sea_orm_db })
     }
 
     /// Run background tasks based on the provided task names
@@ -101,7 +115,20 @@ impl TaskContext {
                     })?
                     .clone();
 
-                // Setup storage
+                let sea_orm_db = self
+                    .sea_orm_db
+                    .as_ref()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("SeaORM database connection required for {}", task_name)
+                    })?
+                    .clone();
+
+                let redis_url = self
+                    .redis_url
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("Redis connection required for {}", task_name))?;
+
+                // Setup PostgreSQL storage for outbox jobs
                 PostgresStorage::setup(&pool).await?;
                 let storage = PostgresStorage::new(pool.clone());
 
@@ -113,8 +140,18 @@ impl TaskContext {
                     listener.listen().await.unwrap();
                 });
 
+                // Setup Redis storage for session jobs
+                let redis_conn = apalis_redis::connect(redis_url.clone()).await?;
+                let redis_storage: RedisStorage<session_handler::SessionJob> = RedisStorage::new(redis_conn);
+
+                // Create context with both database and Redis connections
+                let ctx = outbox_publisher::OutboxContext {
+                    db: sea_orm_db,
+                    redis_storage: Arc::new(Mutex::new(redis_storage)),
+                };
+
                 let worker = WorkerBuilder::new(OUTBOX_PUBLISHER)
-                    .data(())
+                    .data(ctx)
                     .with_storage(storage)
                     .build_fn(outbox_publisher::process_outbox_job);
 
