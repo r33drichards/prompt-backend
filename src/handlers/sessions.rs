@@ -16,6 +16,9 @@ pub struct CreateSessionInput {
     pub inbox_status: InboxStatus,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
+    pub branch: Option<String>,
+    pub repo: Option<String>,
+    pub target_branch: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -32,6 +35,9 @@ pub struct SessionDto {
     pub inbox_status: InboxStatus,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
+    pub branch: Option<String>,
+    pub repo: Option<String>,
+    pub target_branch: Option<String>,
     pub title: Option<String>,
     pub session_status: SessionStatus,
     pub created_at: String,
@@ -47,6 +53,9 @@ impl From<SessionModel> for SessionDto {
             inbox_status: model.inbox_status,
             sbx_config: model.sbx_config,
             parent: model.parent.map(|p| p.to_string()),
+            branch: model.branch,
+            repo: model.repo,
+            target_branch: model.target_branch,
             title: model.title,
             session_status: model.session_status,
             created_at: model.created_at.to_string(),
@@ -73,6 +82,9 @@ pub struct UpdateSessionInput {
     pub inbox_status: InboxStatus,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
+    pub branch: Option<String>,
+    pub repo: Option<String>,
+    pub target_branch: Option<String>,
     pub title: Option<String>,
     pub session_status: Option<SessionStatus>,
 }
@@ -104,24 +116,35 @@ pub async fn create(
         None => None,
     };
 
-    // Extract git repo, branch, and prompt from sbx_config for title generation
-    let mut git_repo: Option<String> = None;
-    let mut target_branch: Option<String> = None;
+    // Use top-level fields (new approach), fallback to sbx_config for backward compatibility
+    let mut git_repo: Option<String> = input.repo.clone();
+    let mut target_branch: Option<String> = input.target_branch.clone();
     let mut prompt: Option<String> = None;
 
-    if let Some(config) = &input.sbx_config {
-        if let Some(obj) = config.as_object() {
-            git_repo = obj.get("git_repo")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+    // Fallback to sbx_config if top-level fields are not provided
+    if git_repo.is_none() || target_branch.is_none() || prompt.is_none() {
+        if let Some(config) = &input.sbx_config {
+            if let Some(obj) = config.as_object() {
+                if git_repo.is_none() {
+                    git_repo = obj.get("git_repo")
+                        .or_else(|| obj.get("repo"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
 
-            target_branch = obj.get("target_branch")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                if target_branch.is_none() {
+                    target_branch = obj.get("target_branch")
+                        .or_else(|| obj.get("targetBranch"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
 
-            prompt = obj.get("prompt")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                if prompt.is_none() {
+                    prompt = obj.get("prompt")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+            }
         }
     }
 
@@ -138,7 +161,6 @@ pub async fn create(
     });
 
     // Generate branch name if not provided
-    let mut final_sbx_config = input.sbx_config.clone();
     if target_branch.is_none() || target_branch.as_ref().map_or(true, |s| s.trim().is_empty()) {
         let generated_branch = anthropic::generate_branch_name(
             git_repo.as_deref(),
@@ -152,25 +174,18 @@ pub async fn create(
             format!("claude/session-{}", &id.to_string()[..24])
         });
 
-        // Update sbx_config with generated branch name
-        if let Some(config) = final_sbx_config.as_mut() {
-            if let Some(obj) = config.as_object_mut() {
-                obj.insert("target_branch".to_string(), serde_json::Value::String(generated_branch));
-            }
-        } else {
-            // Create new sbx_config if it doesn't exist
-            final_sbx_config = Some(serde_json::json!({
-                "target_branch": generated_branch
-            }));
-        }
+        target_branch = Some(generated_branch);
     }
 
     let new_session = session::ActiveModel {
         id: Set(id),
         messages: Set(input.messages.clone()),
         inbox_status: Set(input.inbox_status.clone()),
-        sbx_config: Set(final_sbx_config),
+        sbx_config: Set(input.sbx_config.clone()),
         parent: Set(parent),
+        branch: Set(input.branch.clone()),
+        repo: Set(git_repo),
+        target_branch: Set(target_branch),
         title: Set(Some(title)),
         session_status: Set(SessionStatus::Active),
         created_at: NotSet,
@@ -252,6 +267,9 @@ pub async fn update(
     active_session.inbox_status = Set(input.inbox_status.clone());
     active_session.sbx_config = Set(input.sbx_config.clone());
     active_session.parent = Set(parent);
+    active_session.branch = Set(input.branch.clone());
+    active_session.repo = Set(input.repo.clone());
+    active_session.target_branch = Set(input.target_branch.clone());
     active_session.title = Set(input.title.clone());
 
     // Only update session_status if provided
