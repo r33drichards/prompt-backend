@@ -3,4 +3,4 @@ target/
 
 # Generated TypeScript client
 generated-client/
-openapi.json
+/openapi.json
