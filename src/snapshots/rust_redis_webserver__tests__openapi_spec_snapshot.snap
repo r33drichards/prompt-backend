@@ -1,5 +1,6 @@
 ---
 source: src/main.rs
+assertion_line: 214
 expression: spec
 ---
 {
@@ -228,44 +229,24 @@ expression: spec
       "CreateSessionInput": {
         "type": "object",
         "required": [
-          "inbox_status"
+          "repo",
+          "target_branch"
         ],
         "properties": {
           "messages": {
-            "nullable": true
-          },
-          "inbox_status": {
-            "$ref": "#/components/schemas/InboxStatus"
-          },
-          "sbx_config": {
             "nullable": true
           },
           "parent": {
             "type": "string",
             "nullable": true
           },
-          "branch": {
-            "type": "string",
-            "nullable": true
-          },
           "repo": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "target_branch": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           }
         }
-      },
-      "InboxStatus": {
-        "type": "string",
-        "enum": [
-          "Pending",
-          "Active",
-          "Completed",
-          "Archived"
-        ]
       },
       "ReadSessionOutput": {
         "type": "object",
@@ -334,6 +315,15 @@ expression: spec
             "nullable": true
           }
         }
+      },
+      "InboxStatus": {
+        "type": "string",
+        "enum": [
+          "Pending",
+          "Active",
+          "Completed",
+          "Archived"
+        ]
       },
       "SessionStatus": {
         "type": "string",
