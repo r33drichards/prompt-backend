@@ -1,0 +1,12 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Sandbox API",
+    "version": "0.0.0",
+    "description": "Placeholder - will be updated by GitHub Action workflow"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {}
+  }
+}
