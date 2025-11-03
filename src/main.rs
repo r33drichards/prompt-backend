@@ -19,6 +19,7 @@ mod db;
 mod entities;
 mod error;
 mod handlers;
+mod services;
 
 /// CLI application for the prompt backend server
 #[derive(Parser)]

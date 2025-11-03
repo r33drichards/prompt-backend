@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::entities::session::{self, Entity as Session, Model as SessionModel, InboxStatus};
 use crate::error::{Error, OResult};
+use crate::services::anthropic;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct CreateSessionInput {
@@ -31,6 +32,7 @@ pub struct SessionDto {
     pub inbox_status: InboxStatus,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
+    pub title: Option<String>,
 }
 
 impl From<SessionModel> for SessionDto {
@@ -41,6 +43,7 @@ impl From<SessionModel> for SessionDto {
             inbox_status: model.inbox_status,
             sbx_config: model.sbx_config,
             parent: model.parent.map(|p| p.to_string()),
+            title: model.title,
         }
     }
 }
@@ -62,6 +65,7 @@ pub struct UpdateSessionInput {
     pub inbox_status: InboxStatus,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
+    pub title: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -91,12 +95,46 @@ pub async fn create(
         None => None,
     };
 
+    // Extract git repo, branch, and prompt from sbx_config for title generation
+    let mut git_repo: Option<String> = None;
+    let mut target_branch: Option<String> = None;
+    let mut prompt: Option<String> = None;
+
+    if let Some(config) = &input.sbx_config {
+        if let Some(obj) = config.as_object() {
+            git_repo = obj.get("git_repo")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            target_branch = obj.get("target_branch")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            prompt = obj.get("prompt")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+        }
+    }
+
+    // Generate title using Anthropic Haiku
+    let title = anthropic::generate_session_title(
+        git_repo.as_deref(),
+        target_branch.as_deref(),
+        prompt.as_deref(),
+    )
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!("Failed to generate session title: {}", e);
+        "Untitled Session".to_string()
+    });
+
     let new_session = session::ActiveModel {
         id: Set(id),
         messages: Set(input.messages.clone()),
         inbox_status: Set(input.inbox_status.clone()),
         sbx_config: Set(input.sbx_config.clone()),
         parent: Set(parent),
+        title: Set(Some(title)),
     };
 
     match new_session.insert(db.inner()).await {
@@ -173,6 +211,7 @@ pub async fn update(
     active_session.inbox_status = Set(input.inbox_status.clone());
     active_session.sbx_config = Set(input.sbx_config.clone());
     active_session.parent = Set(parent);
+    active_session.title = Set(input.title.clone());
 
     match active_session.update(db.inner()).await {
         Ok(_) => Ok(Json(UpdateSessionOutput {
