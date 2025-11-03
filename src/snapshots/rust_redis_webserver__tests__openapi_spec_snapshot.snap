@@ -271,7 +271,8 @@ expression: spec
         "type": "object",
         "required": [
           "id",
-          "inbox_status"
+          "inbox_status",
+          "session_status"
         ],
         "properties": {
           "id": {
@@ -293,8 +294,18 @@ expression: spec
           "title": {
             "type": "string",
             "nullable": true
+          },
+          "session_status": {
+            "$ref": "#/components/schemas/SessionStatus"
           }
         }
+      },
+      "SessionStatus": {
+        "type": "string",
+        "enum": [
+          "Active",
+          "Archived"
+        ]
       },
       "ListSessionsOutput": {
         "type": "object",
@@ -350,6 +361,14 @@ expression: spec
           },
           "title": {
             "type": "string",
+            "nullable": true
+          },
+          "session_status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SessionStatus"
+              }
+            ],
             "nullable": true
           }
         }

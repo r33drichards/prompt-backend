@@ -17,6 +17,7 @@ pub struct Model {
     pub parent: Option<Uuid>,
     #[sea_orm(nullable)]
     pub title: Option<String>,
+    pub session_status: SessionStatus,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -33,6 +34,15 @@ pub enum InboxStatus {
     Active,
     #[sea_orm(string_value = "completed")]
     Completed,
+    #[sea_orm(string_value = "archived")]
+    Archived,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema)]
+#[sea_orm(rs_type = "String", db_type = "String(Some(50))")]
+pub enum SessionStatus {
+    #[sea_orm(string_value = "active")]
+    Active,
     #[sea_orm(string_value = "archived")]
     Archived,
 }
