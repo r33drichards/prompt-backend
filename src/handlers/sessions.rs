@@ -143,27 +143,18 @@ pub async fn create(
     let new_session = session::ActiveModel {
         id: Set(id),
         messages: Set(input.messages.clone()),
-        inbox_status: Set(input.inbox_status.clone()),
-        sbx_config: Set(input.sbx_config.clone()),
+        inbox_status: Set(InboxStatus::Active),
+        sbx_config: Set(None),
         parent: Set(parent),
         branch: Set(Some(generated_branch)),
-        repo: Set(input.repo),
-        target_branch: Set(input.target_branch),
+        repo: Set(Some(input.repo)),
+        target_branch: Set(Some(input.target_branch)),
         title: Set(Some(title)),
         session_status: Set(SessionStatus::Active),
-        created_at: NotSet,
-        updated_at: NotSet,
+        created_at: Set(DateTimeWithTimeZone::now()),
+        updated_at: Set(DateTimeWithTimeZone::now()),
         deleted_at: Set(None),
     };
-
-    match new_session.insert(db.inner()).await {
-        Ok(_) => Ok(Json(CreateSessionOutput {
-            success: true,
-            message: "Session created successfully".to_string(),
-            id: id.to_string(),
-        })),
-        Err(e) => Err(Error::database_error(e.to_string())),
-    }
 }
 
 /// Read (retrieve) a session by ID
