@@ -1,0 +1,231 @@
+name: Generate Rust SDK from Sandbox
+
+on:
+  workflow_dispatch:
+    inputs:
+      sandbox_tag:
+        description: 'Tag of the sandbox Docker image (e.g., latest, v1.0.0)'
+        required: false
+        default: 'latest'
+
+env:
+  DOCKER_IMAGE: wholelottahoopla/sandbox
+  SDK_OUTPUT_DIR: sandbox-rust-sdk
+
+jobs:
+  generate-rust-sdk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up variables
+        id: vars
+        run: |
+          SANDBOX_TAG="${{ github.event.inputs.sandbox_tag || 'latest' }}"
+          echo "sandbox_tag=$SANDBOX_TAG" >> $GITHUB_OUTPUT
+          echo "🏷️  Using sandbox tag: $SANDBOX_TAG"
+
+          # Create a branch name based on the sandbox tag
+          BRANCH_NAME="sdk/sandbox-rust-${SANDBOX_TAG}-$(date +%s)"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "🌿 Branch name: $BRANCH_NAME"
+
+      - name: Pull and start sandbox Docker container
+        id: docker
+        run: |
+          echo "🐳 Pulling Docker image: ${{ env.DOCKER_IMAGE }}:${{ steps.vars.outputs.sandbox_tag }}"
+          docker pull ${{ env.DOCKER_IMAGE }}:${{ steps.vars.outputs.sandbox_tag }}
+
+          echo "🚀 Starting Docker container..."
+          CONTAINER_ID=$(docker run -d -p 8080:8080 ${{ env.DOCKER_IMAGE }}:${{ steps.vars.outputs.sandbox_tag }})
+          echo "container_id=$CONTAINER_ID" >> $GITHUB_OUTPUT
+          echo "✅ Container started: $CONTAINER_ID"
+
+      - name: Wait for webserver to be ready
+        run: |
+          echo "⏳ Waiting for webserver to be ready..."
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            if curl -s -f http://localhost:8080/v1/openapi.json > /dev/null 2>&1; then
+              echo "✅ Webserver is ready!"
+              break
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Webserver not ready yet, waiting..."
+            sleep 2
+          done
+
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "❌ Webserver failed to start within timeout"
+            docker logs ${{ steps.docker.outputs.container_id }}
+            exit 1
+          fi
+
+      - name: Fetch OpenAPI specification
+        run: |
+          echo "📥 Fetching OpenAPI specification from http://localhost:8080/v1/openapi.json"
+          curl -s http://localhost:8080/v1/openapi.json > openapi.json
+
+          echo "📄 OpenAPI spec preview:"
+          cat openapi.json | jq '.' || cat openapi.json
+
+          # Validate that the file is not empty and is valid JSON
+          if ! jq empty openapi.json 2>/dev/null; then
+            echo "❌ Invalid OpenAPI JSON"
+            exit 1
+          fi
+
+          echo "✅ OpenAPI specification fetched successfully"
+
+      - name: Install OpenAPI Generator
+        run: |
+          echo "📦 Installing OpenAPI Generator..."
+          wget https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.10.0/openapi-generator-cli-7.10.0.jar -O openapi-generator-cli.jar
+          echo "✅ OpenAPI Generator installed"
+
+      - name: Generate Rust SDK
+        run: |
+          echo "🦀 Generating Rust SDK..."
+
+          # Remove existing SDK directory if it exists
+          rm -rf ${{ env.SDK_OUTPUT_DIR }}
+
+          # Generate Rust client
+          java -jar openapi-generator-cli.jar generate \
+            -i openapi.json \
+            -g rust \
+            -o ${{ env.SDK_OUTPUT_DIR }} \
+            --additional-properties=packageName=sandbox_client,packageVersion=0.1.0
+
+          echo "✅ Rust SDK generated successfully in ${{ env.SDK_OUTPUT_DIR }}"
+
+          # Show generated files
+          echo "📁 Generated files:"
+          ls -la ${{ env.SDK_OUTPUT_DIR }}
+
+      - name: Stop Docker container
+        if: always()
+        run: |
+          if [ -n "${{ steps.docker.outputs.container_id }}" ]; then
+            echo "🛑 Stopping Docker container..."
+            docker stop ${{ steps.docker.outputs.container_id }}
+            docker rm ${{ steps.docker.outputs.container_id }}
+            echo "✅ Container stopped and removed"
+          fi
+
+      - name: Create branch and commit changes
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+          # Create a new branch
+          git checkout -b ${{ steps.vars.outputs.branch_name }}
+
+          # Add the generated SDK
+          git add ${{ env.SDK_OUTPUT_DIR }}
+
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "ℹ️  No changes to commit - SDK is already up to date"
+            echo "has_changes=false" >> $GITHUB_ENV
+          else
+            echo "📝 Committing changes..."
+            git commit -m "Generate Rust SDK from sandbox:${{ steps.vars.outputs.sandbox_tag }}
+
+Generated Rust SDK from sandbox Docker image.
+- Docker image: ${{ env.DOCKER_IMAGE }}:${{ steps.vars.outputs.sandbox_tag }}
+- Generated at: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+"
+            echo "has_changes=true" >> $GITHUB_ENV
+            echo "✅ Changes committed"
+          fi
+
+      - name: Push branch
+        if: env.has_changes == 'true'
+        run: |
+          echo "⬆️  Pushing branch ${{ steps.vars.outputs.branch_name }}..."
+          git push -u origin ${{ steps.vars.outputs.branch_name }}
+          echo "✅ Branch pushed successfully"
+
+      - name: Create Pull Request
+        if: env.has_changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sandboxTag = '${{ steps.vars.outputs.sandbox_tag }}';
+            const branchName = '${{ steps.vars.outputs.branch_name }}';
+            const sdkDir = '${{ env.SDK_OUTPUT_DIR }}';
+
+            const prTitle = `Generate Rust SDK from sandbox:${sandboxTag}`;
+            const prBody = `## 🦀 Rust SDK Generated from Sandbox
+
+This PR contains an automatically generated Rust SDK from the sandbox Docker image.
+
+### Details
+- **Docker Image**: \`${{ env.DOCKER_IMAGE }}:${sandboxTag}\`
+- **Generated Directory**: \`${sdkDir}/\`
+- **Generated At**: ${new Date().toUTCString()}
+
+### What's Included
+- Complete Rust client library generated from OpenAPI specification
+- API models and types
+- Client implementation with support for all endpoints
+
+### Usage
+\`\`\`rust
+use sandbox_client::{apis::configuration::Configuration, apis::default_api};
+
+#[tokio::main]
+async fn main() {
+    let config = Configuration::new();
+    // Use the client...
+}
+\`\`\`
+
+### Next Steps
+1. Review the generated code
+2. Test the SDK against the sandbox service
+3. Merge when ready
+
+---
+*This PR was automatically generated by the [Generate Rust SDK from Sandbox workflow](https://github.com/${{ github.repository }}/actions/workflows/generate-sandbox-rust-sdk.yml)*
+`;
+
+            const { data: pr } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: prTitle,
+              head: branchName,
+              base: context.ref.replace('refs/heads/', ''),
+              body: prBody
+            });
+
+            console.log(`✅ Pull request created: ${pr.html_url}`);
+            core.summary
+              .addHeading('🦀 Rust SDK Generated')
+              .addLink('View Pull Request', pr.html_url)
+              .addTable([
+                [{data: 'Property', header: true}, {data: 'Value', header: true}],
+                ['Docker Image', `\`${{ env.DOCKER_IMAGE }}:${sandboxTag}\``],
+                ['SDK Directory', `\`${sdkDir}\``],
+                ['Branch', `\`${branchName}\``],
+                ['PR Number', `#${pr.number}`]
+              ])
+              .write();
+
+      - name: Summary
+        if: env.has_changes == 'false'
+        run: |
+          echo "## ℹ️  No Changes Needed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The Rust SDK is already up to date with sandbox:${{ steps.vars.outputs.sandbox_tag }}" >> $GITHUB_STEP_SUMMARY
