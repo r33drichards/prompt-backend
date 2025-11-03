@@ -167,7 +167,7 @@
             echo "  ./scripts/test_crud.sh - Run e2e tests"
             echo ""
             echo "OpenAPI Documentation:"
-            echo "  Swagger UI: http://localhost:8000/swagger-ui/"
+            echo "  Swagger UI: http://localhost:8000/swagger-ui/"2
             echo "  RapiDoc:    http://localhost:8000/rapidoc/"
             echo ""
           '';
