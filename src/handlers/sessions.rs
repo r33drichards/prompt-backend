@@ -3,7 +3,8 @@ use rocket::State;
 use rocket_okapi::openapi;
 use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket::serde::{Deserialize, Serialize};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, NotSet, QueryOrder};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, QueryOrder};
+use sea_orm::prelude::DateTimeWithTimeZone;
 use uuid::Uuid;
 
 use crate::entities::session::{self, Entity as Session, Model as SessionModel, InboxStatus, SessionStatus};
@@ -155,6 +156,15 @@ pub async fn create(
         updated_at: Set(DateTimeWithTimeZone::now()),
         deleted_at: Set(None),
     };
+
+    match new_session.insert(db.inner()).await {
+        Ok(_) => Ok(Json(CreateSessionOutput {
+            success: true,
+            message: "Session created successfully".to_string(),
+            id: id.to_string(),
+        })),
+        Err(e) => Err(Error::database_error(e.to_string())),
+    }
 }
 
 /// Read (retrieve) a session by ID
