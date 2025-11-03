@@ -1,5 +1,6 @@
 ---
 source: src/main.rs
+assertion_line: 214
 expression: spec
 ---
 {
@@ -288,6 +289,10 @@ expression: spec
           "parent": {
             "type": "string",
             "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -340,6 +345,10 @@ expression: spec
             "nullable": true
           },
           "parent": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
             "type": "string",
             "nullable": true
           }
