@@ -137,11 +137,39 @@ pub async fn create(
         "Untitled Session".to_string()
     });
 
+    // Generate branch name if not provided
+    let mut final_sbx_config = input.sbx_config.clone();
+    if target_branch.is_none() || target_branch.as_ref().map_or(true, |s| s.trim().is_empty()) {
+        let generated_branch = anthropic::generate_branch_name(
+            git_repo.as_deref(),
+            None,
+            prompt.as_deref(),
+            &id.to_string(),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to generate branch name: {}", e);
+            format!("claude/session-{}", &id.to_string()[..24])
+        });
+
+        // Update sbx_config with generated branch name
+        if let Some(config) = final_sbx_config.as_mut() {
+            if let Some(obj) = config.as_object_mut() {
+                obj.insert("target_branch".to_string(), serde_json::Value::String(generated_branch));
+            }
+        } else {
+            // Create new sbx_config if it doesn't exist
+            final_sbx_config = Some(serde_json::json!({
+                "target_branch": generated_branch
+            }));
+        }
+    }
+
     let new_session = session::ActiveModel {
         id: Set(id),
         messages: Set(input.messages.clone()),
         inbox_status: Set(input.inbox_status.clone()),
-        sbx_config: Set(input.sbx_config.clone()),
+        sbx_config: Set(final_sbx_config),
         parent: Set(parent),
         title: Set(Some(title)),
         session_status: Set(SessionStatus::Active),
