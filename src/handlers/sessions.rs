@@ -3,7 +3,7 @@ use rocket::State;
 use rocket_okapi::openapi;
 use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket::serde::{Deserialize, Serialize};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, QueryOrder};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, NotSet, QueryOrder};
 use uuid::Uuid;
 
 use crate::entities::session::{self, Entity as Session, Model as SessionModel, InboxStatus, SessionStatus};
@@ -139,6 +139,9 @@ pub async fn create(
         parent: Set(parent),
         title: Set(Some(title)),
         session_status: Set(SessionStatus::Active),
+        created_at: NotSet,
+        updated_at: NotSet,
+        deleted_at: Set(None),
     };
 
     match new_session.insert(db.inner()).await {
