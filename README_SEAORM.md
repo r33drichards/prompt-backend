@@ -40,12 +40,14 @@ POST /sessions
 Content-Type: application/json
 
 {
+  "repo": "repository-name",
+  "target_branch": "main",
   "messages": { "content": "example" },
-  "inbox_status": "pending",
-  "sbx_config": { "config": "value" },
   "parent": "uuid-string-or-null"
 }
 ```
+
+Note: `inbox_status` is automatically set to "active", `sbx_config` is set to null, and `title` and `branch` are generated automatically using the Anthropic API.
 
 ### Read Session
 ```

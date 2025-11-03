@@ -21,7 +21,7 @@ done
 echo "Test 1: Creating a session..."
 CREATE_RESPONSE=$(curl -s -X POST http://localhost:8000/sessions \
   -H "Content-Type: application/json" \
-  -d '{"inbox_status": "Pending", "messages": {"content": "test message"}, "sbx_config": {"setting": "value"}}')
+  -d '{"repo": "test-repo", "target_branch": "main", "messages": {"content": "test message"}}')
 echo "Create response: $CREATE_RESPONSE"
 
 if echo "$CREATE_RESPONSE" | grep -q '"success":true'; then
@@ -84,7 +84,7 @@ echo "Test 5: Verifying update..."
 READ_RESPONSE2=$(curl -s http://localhost:8000/sessions/$SESSION_ID)
 echo "Read response after update: $READ_RESPONSE2"
 
-if echo "$READ_RESPONSE2" | grep -q '"inbox_status":"Active"'; then
+if echo "$READ_RESPONSE2" | grep -qi '"inbox_status":"[Aa]ctive"'; then
   echo "✓ Test 5 passed: Update verified"
 else
   echo "✗ Test 5 failed: Update not reflected"
@@ -97,7 +97,7 @@ echo ""
 echo "Test 6: Creating another session for deletion test..."
 CREATE_RESPONSE2=$(curl -s -X POST http://localhost:8000/sessions \
   -H "Content-Type: application/json" \
-  -d '{"inbox_status": "Completed", "messages": {"content": "delete me"}}')
+  -d '{"repo": "test-repo", "target_branch": "main", "messages": {"content": "delete me"}}')
 echo "Create response: $CREATE_RESPONSE2"
 
 if echo "$CREATE_RESPONSE2" | grep -q '"success":true'; then
