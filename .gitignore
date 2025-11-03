@@ -8,3 +8,7 @@ generated-client/
 
 # Git worktrees
 .worktrees/
+
+# Nix build outputs
+result
+result-*
