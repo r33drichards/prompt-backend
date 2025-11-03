@@ -34,6 +34,9 @@ pub struct SessionDto {
     pub parent: Option<String>,
     pub title: Option<String>,
     pub session_status: SessionStatus,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
 }
 
 impl From<SessionModel> for SessionDto {
@@ -46,6 +49,9 @@ impl From<SessionModel> for SessionDto {
             parent: model.parent.map(|p| p.to_string()),
             title: model.title,
             session_status: model.session_status,
+            created_at: model.created_at.to_string(),
+            updated_at: model.updated_at.to_string(),
+            deleted_at: model.deleted_at.map(|d| d.to_string()),
         }
     }
 }
