@@ -26,7 +26,7 @@ struct ContentBlock {
 
 pub async fn generate_session_title(
     git_repo: &str,
-    target_branch &str,
+    target_branch: &str,
     prompt: &str,
 ) -> Result<String, String> {
     let api_key = env::var("ANTHROPIC_API_KEY")
@@ -34,11 +34,11 @@ pub async fn generate_session_title(
 
     // Build context from available information
     let mut context_parts = Vec::new();
-    context_parts.push(format!("Git repository: {}", repo));
+    context_parts.push(format!("Git repository: {}", git_repo));
     context_parts.push(format!("target branch: {}", target_branch));
 
-    context_parts.push(format!("Prompt: {}", p));
-    context_parts.join("\n")
+    context_parts.push(format!("Prompt: {}", prompt));
+    let context = context_parts.join("\n");
 
 
     let user_message = format!(
@@ -87,9 +87,9 @@ pub async fn generate_session_title(
 }
 
 pub async fn generate_branch_name(
-    git_repo: &str>,
-    target_branch: Option<&str>,
-    prompt: Option<&str>,
+    git_repo: &str,
+    target_branch: &str,
+    prompt: &str,
     session_id: &str,
 ) -> Result<String, String> {
     let api_key = env::var("ANTHROPIC_API_KEY")
@@ -98,10 +98,10 @@ pub async fn generate_branch_name(
 
     // Build context from available information
     let mut context_parts = Vec::new();
-    context_parts.push(format!("Git repository: {}", repo));
+    context_parts.push(format!("Git repository: {}", git_repo));
     context_parts.push(format!("target branch: {}", target_branch));
-    context_parts.push(format!("Prompt: {}", p));
-    context_parts.join("\n")
+    context_parts.push(format!("Prompt: {}", prompt));
+    let context = context_parts.join("\n"); 
 
 
     let user_message = format!(

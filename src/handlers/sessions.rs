@@ -151,7 +151,7 @@ pub async fn create(
         inbox_status: Set(input.inbox_status.clone()),
         sbx_config: Set(input.sbx_config.clone()),
         parent: Set(parent),
-        branch: Set(generated_branch),
+        branch: Set(Some(generated_branch)),
         repo: Set(git_repo),
         target_branch: Set(target_branch),
         title: Set(Some(title)),
