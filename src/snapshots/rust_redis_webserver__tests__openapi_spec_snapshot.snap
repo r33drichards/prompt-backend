@@ -340,8 +340,7 @@ expression: spec
         "type": "object",
         "required": [
           "id",
-          "inbox_status",
-          "session_status"
+          "inbox_status"
         ],
         "properties": {
           "id": {
@@ -365,7 +364,12 @@ expression: spec
             "nullable": true
           },
           "session_status": {
-            "$ref": "#/components/schemas/SessionStatus"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SessionStatus"
+              }
+            ],
+            "nullable": true
           }
         }
       },

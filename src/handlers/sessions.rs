@@ -68,7 +68,7 @@ pub struct UpdateSessionInput {
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
     pub title: Option<String>,
-    pub session_status: SessionStatus,
+    pub session_status: Option<SessionStatus>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -216,7 +216,11 @@ pub async fn update(
     active_session.sbx_config = Set(input.sbx_config.clone());
     active_session.parent = Set(parent);
     active_session.title = Set(input.title.clone());
-    active_session.session_status = Set(input.session_status.clone());
+
+    // Only update session_status if provided
+    if let Some(status) = &input.session_status {
+        active_session.session_status = Set(status.clone());
+    }
 
     match active_session.update(db.inner()).await {
         Ok(_) => Ok(Json(UpdateSessionOutput {
