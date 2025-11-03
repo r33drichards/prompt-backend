@@ -270,9 +270,11 @@ expression: spec
       "SessionDto": {
         "type": "object",
         "required": [
+          "created_at",
           "id",
           "inbox_status",
-          "session_status"
+          "session_status",
+          "updated_at"
         ],
         "properties": {
           "id": {
@@ -297,6 +299,16 @@ expression: spec
           },
           "session_status": {
             "$ref": "#/components/schemas/SessionStatus"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "deleted_at": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
