@@ -25,33 +25,21 @@ struct ContentBlock {
 }
 
 pub async fn generate_session_title(
-    git_repo: Option<&str>,
-    target_branch: Option<&str>,
-    prompt: Option<&str>,
+    git_repo: &str,
+    target_branch &str,
+    prompt: &str,
 ) -> Result<String, String> {
     let api_key = env::var("ANTHROPIC_API_KEY")
         .map_err(|_| "ANTHROPIC_API_KEY not set in environment".to_string())?;
 
     // Build context from available information
     let mut context_parts = Vec::new();
+    context_parts.push(format!("Git repository: {}", repo));
+    context_parts.push(format!("target branch: {}", target_branch));
 
-    if let Some(repo) = git_repo {
-        context_parts.push(format!("Git repository: {}", repo));
-    }
+    context_parts.push(format!("Prompt: {}", p));
+    context_parts.join("\n")
 
-    if let Some(branch) = target_branch {
-        context_parts.push(format!("Target branch: {}", branch));
-    }
-
-    if let Some(p) = prompt {
-        context_parts.push(format!("Prompt: {}", p));
-    }
-
-    let context = if context_parts.is_empty() {
-        "No context provided".to_string()
-    } else {
-        context_parts.join("\n")
-    };
 
     let user_message = format!(
         "Generate a concise, descriptive title (max 60 characters) for a coding session based on this context:\n\n{}\n\nRespond with ONLY the title, nothing else.",
@@ -99,7 +87,7 @@ pub async fn generate_session_title(
 }
 
 pub async fn generate_branch_name(
-    git_repo: Option<&str>,
+    git_repo: &str>,
     target_branch: Option<&str>,
     prompt: Option<&str>,
     session_id: &str,
@@ -107,26 +95,14 @@ pub async fn generate_branch_name(
     let api_key = env::var("ANTHROPIC_API_KEY")
         .map_err(|_| "ANTHROPIC_API_KEY not set in environment".to_string())?;
 
+
     // Build context from available information
     let mut context_parts = Vec::new();
+    context_parts.push(format!("Git repository: {}", repo));
+    context_parts.push(format!("target branch: {}", target_branch));
+    context_parts.push(format!("Prompt: {}", p));
+    context_parts.join("\n")
 
-    if let Some(repo) = git_repo {
-        context_parts.push(format!("Git repository: {}", repo));
-    }
-
-    if let Some(branch) = target_branch {
-        context_parts.push(format!("Base branch: {}", branch));
-    }
-
-    if let Some(p) = prompt {
-        context_parts.push(format!("Prompt: {}", p));
-    }
-
-    let context = if context_parts.is_empty() {
-        "No context provided".to_string()
-    } else {
-        context_parts.join("\n")
-    };
 
     let user_message = format!(
         "Generate a concise, descriptive git branch name (max 50 characters) for a coding session based on this context:\n\n{}\n\nThe branch name should be:\n- Descriptive of the task/feature\n- In kebab-case (lowercase with hyphens)\n- Git-safe (only alphanumeric characters and hyphens)\n\nRespond with ONLY the branch name, nothing else. Do NOT include 'claude/' prefix.",

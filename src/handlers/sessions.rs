@@ -118,7 +118,6 @@ pub async fn create(
 
     // Use top-level fields (new approach), fallback to sbx_config for backward compatibility
     let git_repo: Option<String> = input.repo.clone();
-    let mut target_branch: Option<String> = input.target_branch.clone();
     let prompt: Option<String> = None;
 
 
