@@ -267,17 +267,8 @@ cargo test
 
 ### Project Structure
 
-This project uses a Cargo workspace:
-- `agent-sandbox-sdk/` - Generated Rust SDK client (from OpenAPI spec)
-- Root - Main server application
-
-The SDK is automatically available to server code via workspace dependency.
-
 ```
 .
-├── agent-sandbox-sdk/       # Generated Rust SDK client
-│   ├── Cargo.toml
-│   └── src/
 ├── src/
 │   ├── main.rs              # Application entry point
 │   ├── store.rs             # Abstract store interface (Redis)
@@ -285,14 +276,12 @@ The SDK is automatically available to server code via workspace dependency.
 │   └── handlers/
 │       ├── mod.rs
 │       └── items.rs         # CRUD endpoint handlers
-├── tests/
-│   └── sdk_smoke_test.rs    # SDK integration tests
 ├── scripts/
 │   └── test_crud.sh         # E2E test script
 ├── .github/
 │   └── workflows/
 │       └── integration-tests.yml  # CI/CD pipeline
-├── Cargo.toml               # Rust workspace + dependencies
+├── Cargo.toml               # Rust dependencies
 ├── flake.nix                # Nix development environment
 ├── docker-compose.yml       # Docker orchestration
 └── Dockerfile               # Multi-stage build
