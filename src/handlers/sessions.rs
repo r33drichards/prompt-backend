@@ -152,8 +152,8 @@ pub async fn create(
         target_branch: Set(Some(input.target_branch)),
         title: Set(Some(title)),
         session_status: Set(SessionStatus::Active),
-        created_at: Set(DateTimeWithTimeZone::now()),
-        updated_at: Set(DateTimeWithTimeZone::now()),
+        created_at: Set(DateTimeWithTimeZone::new()),
+        updated_at: Set(DateTimeWithTimeZone::new()),
         deleted_at: Set(None),
     };
 
