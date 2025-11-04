@@ -82,8 +82,7 @@ services:
       retries: 30
 
   webserver:
-    build:
-      context: .
+    image: rust-redis-webserver:latest
     command: ["rust-redis-webserver", "--server"]
     ports:
       - "8000:8000"

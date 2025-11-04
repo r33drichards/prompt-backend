@@ -179,6 +179,11 @@
         # Package the Rust application
         packages.default = rustPackage;
 
+        # Agent Sandbox SDK
+        packages.agent-sandbox-sdk = pkgs.callPackage ./agent-sandbox-sdk {
+          inherit rustToolchain;
+        };
+
         # Docker image (optional, uses Dockerfile)
         packages.docker = pkgs.dockerTools.buildLayeredImage {
           name = "rust-redis-webserver";

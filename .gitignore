@@ -4,3 +4,6 @@ target/
 # Generated TypeScript client
 generated-client/
 /openapi.json
+.direnv/
+result*
+.worktrees
