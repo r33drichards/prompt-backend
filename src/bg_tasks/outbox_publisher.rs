@@ -71,8 +71,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
     // get sbx config from ip-allocator
     // Read IP_ALLOCATOR_URL from environment, e.g., "http://localhost:8000"
-    let ip_allocator_url = std::env::var("IP_ALLOCATOR_URL")
-        .unwrap_or_else(|_| "http://localhost:8000".to_string());
+    let ip_allocator_url =
+        std::env::var("IP_ALLOCATOR_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
 
     let ip_client = ip_allocator_client::Client::new(&ip_allocator_url);
     let borrowed_ip = ip_client.handlers_ip_borrow().await.map_err(|e| {

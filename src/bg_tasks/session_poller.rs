@@ -50,9 +50,10 @@ async fn poll_and_enqueue_sessions(
             payload: serde_json::json!({}),
         };
 
-        storage.push(job).await.map_err(|e| {
-            anyhow::anyhow!("Failed to push job to storage: {}", e)
-        })?;
+        storage
+            .push(job)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to push job to storage: {}", e))?;
     }
 
     Ok(count)
