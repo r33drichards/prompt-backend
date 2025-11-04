@@ -3,9 +3,7 @@ set -e
 
 echo "Building and starting services..."
 docker compose build
-docker compose up -d redis
-docker compose up -d postgres
-docker compose up -d webserver
+docker compose up -d
 
 echo "Waiting for webserver to be ready..."
 for i in {1..30}; do

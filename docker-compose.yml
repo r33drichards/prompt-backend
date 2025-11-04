@@ -92,9 +92,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      keycloak:
+        condition: service_healthy
     environment:
       - REDIS_URL=redis://redis:6379/
       - DATABASE_URL=postgres://promptuser:promptpass@postgres/prompt_backend
+      - KEYCLOAK_ISSUER=http://keycloak:8080/realms/oauth2-realm
+      - KEYCLOAK_JWKS_URI=http://keycloak:8080/realms/oauth2-realm/protocol/openid-connect/certs
 
 volumes:
   postgres_data:
