@@ -1,5 +1,5 @@
 use apalis::prelude::*;
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
@@ -26,14 +26,8 @@ pub struct OutboxContext {
 
 /// Process an outbox job: read from PostgreSQL sessions with active inbox_status,
 /// publish to Redis, and mark as pending
-pub async fn process_outbox_job(
-    job: OutboxJob,
-    ctx: Data<OutboxContext>,
-) -> Result<(), Error> {
-    info!(
-        "Processing outbox job for session_id: {}",
-        job.session_id
-    );
+pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Result<(), Error> {
+    info!("Processing outbox job for session_id: {}", job.session_id);
 
     // Query sessions with Active inbox_status
     let active_sessions = Session::find()
@@ -61,12 +55,15 @@ pub async fn process_outbox_job(
         })?;
 
         // Parse the response JSON to extract mcp_url and api_url
-        let mcp_json_string = borrowed_ip.item["mcp_json_string"].as_str()
+        let mcp_json_string = borrowed_ip.item["mcp_json_string"]
+            .as_str()
             .ok_or_else(|| Error::Failed("Missing mcp_json_string in response".into()))?;
 
         info!("Borrowed sandbox - mcp_json_string: {}", mcp_json_string);
 
-        let api_url = borrowed_ip.item["api_url"].as_str().ok_or_else(|| Error::Failed("Missing api_url in response".into()))?;
+        let api_url = borrowed_ip.item["api_url"]
+            .as_str()
+            .ok_or_else(|| Error::Failed("Missing api_url in response".into()))?;
 
         info!("Borrowed sandbox - api_url: {}", api_url);
 
@@ -79,19 +76,26 @@ pub async fn process_outbox_job(
             id: None,
             timeout: Some(30.0 as f64),
             exec_dir: Some(String::from("/home/gem")),
-        }).await.map_err(|e| {
+        })
+        .await
+        .map_err(|e| {
             error!("Failed to execute command: {}", e);
             Error::Failed(Box::new(e))
         })?;
 
-        // clone the repo 
+        // clone the repo
         sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-            command: format!("git clone https://github.com/{}.git repo", _session_model.repo.unwrap()),
+            command: format!(
+                "git clone https://github.com/{}.git repo",
+                _session_model.repo.unwrap()
+            ),
             async_mode: false,
             id: None,
             timeout: Some(30.0 as f64),
             exec_dir: Some(String::from("/home/gem")),
-        }).await.map_err(|e| {
+        })
+        .await
+        .map_err(|e| {
             error!("Failed to execute command: {}", e);
             Error::Failed(Box::new(e))
         })?;
@@ -103,7 +107,9 @@ pub async fn process_outbox_job(
             id: None,
             timeout: Some(30.0 as f64),
             exec_dir: Some(String::from("/home/gem/repo")),
-        }).await.map_err(|e| {
+        })
+        .await
+        .map_err(|e| {
             error!("Failed to execute command: {}", e);
             Error::Failed(Box::new(e))
         })?;
@@ -113,16 +119,14 @@ pub async fn process_outbox_job(
             .unwrap_or_else(|| format!("claude/{}", _session_model.id));
         // if branch exists, checkout the branch, else switch -c the branch
         sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-            command: format!(
-                "git checkout {} || git switch -c {}",
-                branch,
-                branch
-            ),
+            command: format!("git checkout {} || git switch -c {}", branch, branch),
             async_mode: false,
             id: None,
             timeout: Some(30.0 as f64),
             exec_dir: Some(String::from("/home/gem/repo")),
-        }).await.map_err(|e| {
+        })
+        .await
+        .map_err(|e| {
             error!("Failed to execute command: {}", e);
             Error::Failed(Box::new(e))
         })?;
@@ -201,7 +205,12 @@ pub async fn process_outbox_job(
                     if !stderr.is_empty() {
                         info!("Claude Code stderr for session {}: {}", session_id, stderr);
                     }
-                    let mut msgs = _session_model.messages.clone().unwrap_or_default().into_iter(). collect::<Vec<serde_json::Value>>();
+                    let mut msgs = _session_model
+                        .messages
+                        .clone()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .collect::<Vec<serde_json::Value>>();
 
                     // Log each line of stream-json output
                     for line in stdout.lines() {
@@ -209,24 +218,29 @@ pub async fn process_outbox_job(
 
                         let json = serde_json::from_str::<serde_json::Value>(line).unwrap();
                         msgs.push(json.into());
-
-                        // set session.messages to the new messages
-                        _session_model.messages = Some(msgs.into());
-                        _session_model.update(&ctx.db).await.map_err(|e| {
-                            error!("Failed to update session {} messages in database: {}", session_id, e);
+                        // Update session messages in database every time we get a new message
+                        let mut active_session: session::ActiveModel = _session_model.into();
+                        active_session.messages = Set(Some(msgs.into()));
+                        active_session.update(&ctx.db).await.map_err(|e| {
+                            error!(
+                                "Failed to update session {} messages in database: {}",
+                                session_id, e
+                            );
                             Error::Failed(Box::new(e))
                         })?;
-             
-
                     }
-
-
                 }
                 Ok(Err(e)) => {
-                    error!("Failed to execute Claude Code CLI for session {}: {}", session_id, e);
+                    error!(
+                        "Failed to execute Claude Code CLI for session {}: {}",
+                        session_id, e
+                    );
                 }
                 Err(e) => {
-                    error!("Failed to spawn blocking task for session {}: {}", session_id, e);
+                    error!(
+                        "Failed to spawn blocking task for session {}: {}",
+                        session_id, e
+                    );
                 }
             }
 
