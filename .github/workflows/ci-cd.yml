@@ -105,24 +105,16 @@ jobs:
           echo "   - ${{ env.IMAGE_NAME }}:${{ github.sha }}"
           echo "   - ${{ env.IMAGE_NAME }}:latest"
 
-  # Uncomment this job if you want to deploy to Railway
   deploy-railway:
-    needs: [deploy]
+    needs: [build, test]
     runs-on: ubuntu-latest
+    container: ghcr.io/railwayapp/cli:latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      SVC_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
     steps:
-      - name: Trigger Railway deployment
-        env:
-          RAILWAY_API_KEY: ${{ secrets.RAILWAY_API_KEY }}
-        run: |
-          curl --request POST \
-            --url https://backboard.railway.app/graphql/v2 \
-            --header "Authorization: Bearer $RAILWAY_API_KEY" \
-            --header 'Content-Type: application/json' \
-            --data '{
-              "query": "mutation deploymentRedeploy($id: String!) {\n  deploymentRedeploy(id: $id) {\n    id\n  }\n}",
-              "variables": {
-                "id": "eb78de67-f81d-4d16-b767-802acf609d66"
-              },
-              "operationName": "deploymentRedeploy"
-            }'
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Railway
+        run: railway up --service=${{ env.SVC_ID }}
