@@ -5,3 +5,4 @@ target/
 generated-client/
 /openapi.json
 .direnv/
+result*
