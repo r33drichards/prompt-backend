@@ -1,5 +1,4 @@
 use apalis::prelude::*;
-use apalis_redis::RedisStorage;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -24,7 +23,6 @@ impl Job for OutboxJob {
 #[derive(Clone)]
 pub struct OutboxContext {
     pub db: DatabaseConnection,
-    pub redis_storage: Arc<Mutex<RedisStorage<SessionJob>>>,
 }
 
 /// Process an outbox job: read from PostgreSQL sessions with active inbox_status,
@@ -52,47 +50,25 @@ pub async fn process_outbox_job(
 
     // Process each active session
     for session_model in active_sessions {
-        let session_id = session_model.id.to_string();
-
-        // Create SessionJob for this session
-        let session_job = SessionJob {
-            session_id: session_id.clone(),
-            action: "process".to_string(),
-            data: serde_json::json!({
-                "messages": session_model.messages,
-                "sbx_config": session_model.sbx_config,
-                "branch": session_model.branch,
-                "repo": session_model.repo,
-                "target_branch": session_model.target_branch,
-            }),
-        };
-
-        // Push job to Redis queue
-        let mut storage = ctx.redis_storage.lock().await;
-        match storage.push(session_job).await {
-            Ok(job_id) => {
-                info!("Pushed SessionJob to Redis for session {}: {:?}", session_id, job_id);
-                drop(storage); // Release lock before database update
-
-                // Update inbox_status to Pending
-                let mut active_model: session::ActiveModel = session_model.into();
-                active_model.inbox_status = Set(InboxStatus::Pending);
-
-                match active_model.update(&ctx.db).await {
-                    Ok(_) => {
-                        info!("Updated session {} inbox_status to Pending", session_id);
-                    }
-                    Err(e) => {
-                        error!("Failed to update session {} inbox_status: {}", session_id, e);
-                        // Note: Job is already in Redis, so we log error but continue
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Failed to push SessionJob to Redis for session {}: {}", session_id, e);
-                // Continue with other sessions
-            }
-        }
+        // get sbx config from ip-allocator 
+        // run gh auth login sbx sdk using gh auth token, hard code for initial testing 
+        // clone target branch
+        // create a new branch with name session_model.branch
+        // run   npx -y @anthropic-ai/claude-code \
+            // --append-system-prompt "you are running as a disposable task agent with a git repo checked out in a feature branch. when you completed with your task, commit and push the changes upstream" \
+            // --dangerously-skip-permissions \
+            // --print \
+            // --output-format=stream-json \
+            // --session-id `uuidgen` \
+            // --allowedTools "WebSearch" "mcp__*" "ListMcpResourcesTool" "ReadMcpResourceTool" \
+            // --disallowedTools "Bash" "Edit" "Write" "NotebookEdit" "Read" "Glob" "Grep" "KillShell" "BashOutput" "TodoWrite" \
+            // -p "what are your available tools?" \
+            // --verbose \ 
+            // --strict-mcp-config \
+            // --mcp-config borrow.mcp-config 
+            // locally 
+        // check ~/claude for the session id messages 
+        // update session model with messages and inbox status
     }
 
     info!("Completed outbox job for session_id: {}", job.session_id);
