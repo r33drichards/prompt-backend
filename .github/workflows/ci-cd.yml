@@ -41,12 +41,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
 
-      - name: Build Docker image
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Build Docker image with Nix
         run: |
-          docker build -t rust-redis-webserver:latest .
+          echo "Building Docker image with Nix..."
+          nix build .#docker
+
+          echo "Loading Docker image..."
+          docker load < result
+
+          echo "Saving Docker image as artifact..."
           docker save rust-redis-webserver:latest | gzip > docker-image.tar.gz
 
       - name: Upload artifact
