@@ -443,6 +443,7 @@ Authorization: Bearer <your-jwt-token>
 - `ROCKET_PORT`: Server port (default: `8000`)
 - `KEYCLOAK_ISSUER`: Keycloak OAuth issuer URL (required for authentication)
 - `KEYCLOAK_JWKS_URI`: Keycloak JWKS endpoint URL (required for JWT validation)
+- `IP_ALLOCATOR_URL`: IP allocator service URL (default: `http://localhost:8000`)
 
 ### Using a .env File
 

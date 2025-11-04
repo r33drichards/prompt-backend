@@ -6,9 +6,7 @@ use apalis::prelude::*;
 use apalis_redis::RedisStorage;
 use apalis_sql::postgres::{PgListen, PgPool, PostgresStorage};
 use sea_orm::DatabaseConnection;
-use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
 use tracing::info;
 
 /// Available background task names
@@ -140,14 +138,9 @@ impl TaskContext {
                     listener.listen().await.unwrap();
                 });
 
-                // Setup Redis storage for session jobs
-                let redis_conn = apalis_redis::connect(redis_url.clone()).await?;
-                let redis_storage: RedisStorage<session_handler::SessionJob> = RedisStorage::new(redis_conn);
-
-                // Create context with both database and Redis connections
+                // Create context with database connection
                 let ctx = outbox_publisher::OutboxContext {
                     db: sea_orm_db,
-                    redis_storage: Arc::new(Mutex::new(redis_storage)),
                 };
 
                 let worker = WorkerBuilder::new(OUTBOX_PUBLISHER)
