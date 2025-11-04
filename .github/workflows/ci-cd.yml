@@ -34,7 +34,30 @@ jobs:
         run: nix develop --command cargo clippy -- -D warnings
 
 
+  build:
+    needs: [test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          docker build -t rust-redis-webserver:latest .
+          docker save rust-redis-webserver:latest | gzip > docker-image.tar.gz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: docker-image.tar.gz
+          retention-days: 1
+
   deploy:
+    needs: [build]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     steps:
