@@ -13,6 +13,10 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test-type: [tests, fmt, clippy]
+    name: test (${{ matrix.test-type }})
     steps:
       - uses: actions/checkout@v4
 
@@ -23,14 +27,17 @@ jobs:
         uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Run unit tests
+        if: matrix.test-type == 'tests'
         run: nix develop --command cargo test --all-targets
         env:
           RUST_BACKTRACE: 1
 
       - name: Check formatting
+        if: matrix.test-type == 'fmt'
         run: nix develop --command cargo fmt -- --check
 
       - name: Run clippy
+        if: matrix.test-type == 'clippy'
         run: nix develop --command cargo clippy -- -D warnings
 
 
