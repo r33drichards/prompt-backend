@@ -81,6 +81,21 @@ services:
       timeout: 5s
       retries: 30
 
+  webserver:
+    build:
+      context: .
+    command: ["rust-redis-webserver", "--server"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - REDIS_URL=redis://redis:6379/
+      - DATABASE_URL=postgres://promptuser:promptpass@postgres/prompt_backend
+
 volumes:
   postgres_data:
   redis_data:
