@@ -8,10 +8,10 @@ use tracing::info;
 use crate::auth::JwksCache;
 use crate::db::establish_connection;
 
+use rocket_cors::{AllowedOrigins, CorsOptions};
 use rocket_okapi::settings::UrlObject;
 use rocket_okapi::swagger_ui::make_swagger_ui;
 use rocket_okapi::{openapi_get_routes, rapidoc::*, swagger_ui::*};
-use rocket_cors::{AllowedOrigins, CorsOptions};
 
 use sea_orm_migration::prelude::*;
 
@@ -112,10 +112,16 @@ async fn main() -> anyhow::Result<()> {
     if !bg_task_names.is_empty() {
         // Determine which connections are needed based on task names
         let needs_redis = bg_task_names.iter().any(|t| t == bg_tasks::SESSION_HANDLER);
-        let needs_postgres = bg_task_names.iter().any(|t| t == bg_tasks::OUTBOX_PUBLISHER);
+        let needs_postgres = bg_task_names
+            .iter()
+            .any(|t| t == bg_tasks::OUTBOX_PUBLISHER);
 
         let task_redis_url = if needs_redis { Some(redis_url) } else { None };
-        let task_database_url = if needs_postgres { Some(database_url) } else { None };
+        let task_database_url = if needs_postgres {
+            Some(database_url)
+        } else {
+            None
+        };
 
         let bg_tasks_handle = tokio::spawn(async move {
             info!("Starting background tasks");
@@ -156,10 +162,9 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
     println!("Migrations completed successfully");
 
     // Initialize JWKS cache
-    let keycloak_issuer = std::env::var("KEYCLOAK_ISSUER")
-        .expect("KEYCLOAK_ISSUER must be set");
-    let keycloak_jwks_uri = std::env::var("KEYCLOAK_JWKS_URI")
-        .expect("KEYCLOAK_JWKS_URI must be set");
+    let keycloak_issuer = std::env::var("KEYCLOAK_ISSUER").expect("KEYCLOAK_ISSUER must be set");
+    let keycloak_jwks_uri =
+        std::env::var("KEYCLOAK_JWKS_URI").expect("KEYCLOAK_JWKS_URI must be set");
 
     let jwks_cache = JwksCache::new(keycloak_jwks_uri, keycloak_issuer);
 

@@ -40,7 +40,6 @@ pub async fn generate_session_title(
     context_parts.push(format!("Prompt: {}", prompt));
     let context = context_parts.join("\n");
 
-
     let user_message = format!(
         "Generate a concise, descriptive title (max 60 characters) for a coding session based on this context:\n\n{}\n\nRespond with ONLY the title, nothing else.",
         context
@@ -68,7 +67,10 @@ pub async fn generate_session_title(
 
     if !response.status().is_success() {
         let status = response.status();
-        let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
         return Err(format!("Anthropic API error ({}): {}", status, error_text));
     }
 
@@ -95,14 +97,12 @@ pub async fn generate_branch_name(
     let api_key = env::var("ANTHROPIC_API_KEY")
         .map_err(|_| "ANTHROPIC_API_KEY not set in environment".to_string())?;
 
-
     // Build context from available information
     let mut context_parts = Vec::new();
     context_parts.push(format!("Git repository: {}", git_repo));
     context_parts.push(format!("target branch: {}", target_branch));
     context_parts.push(format!("Prompt: {}", prompt));
-    let context = context_parts.join("\n"); 
-
+    let context = context_parts.join("\n");
 
     let user_message = format!(
         "Generate a concise, descriptive git branch name (max 50 characters) for a coding session based on this context:\n\n{}\n\nThe branch name should be:\n- Descriptive of the task/feature\n- In kebab-case (lowercase with hyphens)\n- Git-safe (only alphanumeric characters and hyphens)\n\nRespond with ONLY the branch name, nothing else. Do NOT include 'claude/' prefix.",
@@ -131,7 +131,10 @@ pub async fn generate_branch_name(
 
     if !response.status().is_success() {
         let status = response.status();
-        let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
         return Err(format!("Anthropic API error ({}): {}", status, error_text));
     }
 
@@ -150,7 +153,13 @@ pub async fn generate_branch_name(
     branch_name = branch_name
         .to_lowercase()
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .split('-')
         .filter(|s| !s.is_empty())

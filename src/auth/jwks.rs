@@ -29,9 +29,9 @@ where
             let strings: Result<Vec<String>, _> = arr
                 .into_iter()
                 .map(|v| {
-                    v.as_str()
-                        .map(|s| s.to_string())
-                        .ok_or_else(|| serde::de::Error::custom("audience array contains non-string"))
+                    v.as_str().map(|s| s.to_string()).ok_or_else(|| {
+                        serde::de::Error::custom("audience array contains non-string")
+                    })
                 })
                 .collect();
             strings.map(Some)
@@ -95,8 +95,7 @@ impl JwksCache {
     }
 
     pub async fn validate_token(&self, token: &str) -> Result<Claims, String> {
-        let header = decode_header(token)
-            .map_err(|e| format!("Invalid token header: {}", e))?;
+        let header = decode_header(token).map_err(|e| format!("Invalid token header: {}", e))?;
 
         let kid = header.kid.ok_or("Missing kid in token header")?;
 

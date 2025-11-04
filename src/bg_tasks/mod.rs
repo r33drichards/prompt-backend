@@ -25,10 +25,7 @@ pub struct TaskContext {
 
 impl TaskContext {
     /// Create a new TaskContext with optional Redis and PostgreSQL connections
-    pub async fn new(
-        redis_url: Option<String>,
-        database_url: Option<String>,
-    ) -> Result<Self> {
+    pub async fn new(redis_url: Option<String>, database_url: Option<String>) -> Result<Self> {
         let db = if let Some(url) = database_url {
             Some(
                 PgPool::connect(&url)
@@ -121,10 +118,9 @@ impl TaskContext {
                 Ok(monitor.register(worker))
             }
             SESSION_HANDLER => {
-                let redis_url = self
-                    .redis_url
-                    .as_ref()
-                    .ok_or_else(|| anyhow::anyhow!("Redis connection required for {}", task_name))?;
+                let redis_url = self.redis_url.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("Redis connection required for {}", task_name)
+                })?;
 
                 let conn = apalis_redis::connect(redis_url.clone()).await?;
                 let storage = RedisStorage::new(conn);
