@@ -1,11 +1,12 @@
 use apalis::prelude::Storage;
 use apalis_sql::postgres::{PgPool, PostgresStorage};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use std::time::Duration;
 use tracing::{error, info};
+use uuid::Uuid;
 
 use super::outbox_publisher::OutboxJob;
-use crate::entities::session::{self, Entity as Session, InboxStatus};
+use crate::entities::session::{self, Entity as Session, InboxStatus, SessionStatus};
 
 /// Periodic poller that checks for active sessions every second
 /// and pushes them to the outbox queue for processing
@@ -38,6 +39,7 @@ async fn poll_and_enqueue_sessions(
     // Query all sessions with Active inbox_status
     let active_sessions = Session::find()
         .filter(session::Column::InboxStatus.eq(InboxStatus::Active))
+        .filter(session::Column::SessionStatus.eq(SessionStatus::Active))
         .all(db)
         .await?;
 
@@ -54,7 +56,28 @@ async fn poll_and_enqueue_sessions(
             .push(job)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to push job to storage: {}", e))?;
+
+        // Mark session as Pending after successfully enqueueing
+        update_session_status_to_pending(db, session.id).await?;
     }
 
     Ok(count)
 }
+
+/// Update a session's inbox_status to Pending
+async fn update_session_status_to_pending(
+    db: &DatabaseConnection,
+    session_id: Uuid,
+) -> anyhow::Result<()> {
+    let session = Session::find_by_id(session_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
+
+    let mut active_session: session::ActiveModel = session.into();
+    active_session.inbox_status = ActiveValue::Set(InboxStatus::Pending);
+    active_session.update(db).await?;
+
+    Ok(())
+}
+
