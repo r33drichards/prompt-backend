@@ -1,5 +1,5 @@
 {
-    "openapi": "3.1.0",
+    "openapi": "3.0.0",
     "info": {
         "title": "FastAPI",
         "description": "\n- Browser\n    - CDP: [/cdp/json/version](/cdp/json/version)\n- Jupyter\n    - Notebook: [/jupyter](/jupyter)\n- MCP\n    - Streamable HTTP: [/mcp](/mcp) or [/v1/mcp](/v1/mcp)\n",
@@ -675,50 +675,6 @@
                 },
                 "x-fern-sdk-group-name": "file",
                 "x-fern-sdk-method-name": "find_files"
-            }
-        },
-        "/v1/file/upload": {
-            "post": {
-                "tags": [
-                    "file"
-                ],
-                "summary": "Upload File",
-                "description": "Upload file using streaming",
-                "operationId": "upload_file",
-                "requestBody": {
-                    "content": {
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/Body_upload_file"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "200": {
-                        "description": "Successful Response",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Response_FileUploadResult_"
-                                }
-                            }
-                        }
-                    },
-                    "422": {
-                        "description": "Validation Error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/HTTPValidationError"
-                                }
-                            }
-                        }
-                    }
-                },
-                "x-fern-sdk-group-name": "file",
-                "x-fern-sdk-method-name": "upload_file"
             }
         },
         "/v1/file/download": {
@@ -1690,9 +1646,6 @@
                                     ]
                                 },
                                 "type": "array"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Audience"
@@ -1703,9 +1656,6 @@
                                 "type": "number",
                                 "maximum": 1.0,
                                 "minimum": 0.0
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Priority"
@@ -1734,9 +1684,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/Annotations"
-                            },
-                            {
-                                "type": "null"
                             }
                         ]
                     },
@@ -1745,9 +1692,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Meta"
@@ -1774,9 +1718,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Description",
@@ -1815,9 +1756,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Mimetype"
@@ -1827,9 +1765,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Meta"
@@ -1872,9 +1807,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/Resolution"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "The desired screen resolution, allowed values are: 1920x1080, 640x480, 1360x768, 1280x720, 800x600, 1024x768, 1280x800, 1920x1200, 1280x960, 1400x1050, 1680x1050, 1280x1024, 1600x1200."
@@ -1943,9 +1875,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Meta"
@@ -1978,9 +1907,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Structuredcontent"
@@ -2011,9 +1937,6 @@
                         "anyOf": [
                             {
                                 "type": "number"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "X"
@@ -2022,9 +1945,6 @@
                         "anyOf": [
                             {
                                 "type": "number"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Y"
@@ -2070,9 +1990,6 @@
                                 "type": "integer",
                                 "maximum": 300.0,
                                 "minimum": 1.0
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Timeout",
@@ -2116,9 +2033,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Stdout",
@@ -2128,9 +2042,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Stderr",
@@ -2140,9 +2051,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Exit Code",
@@ -2191,9 +2099,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Runtime Version",
@@ -2269,9 +2174,6 @@
                         "anyOf": [
                             {
                                 "type": "number"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "X"
@@ -2280,9 +2182,6 @@
                         "anyOf": [
                             {
                                 "type": "number"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Y"
@@ -2365,9 +2264,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/Annotations"
-                            },
-                            {
-                                "type": "null"
                             }
                         ]
                     },
@@ -2376,9 +2272,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Meta"
@@ -2469,9 +2362,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Size",
@@ -2481,9 +2371,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Modified Time",
@@ -2493,9 +2380,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Permissions",
@@ -2505,9 +2389,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Extension",
@@ -2534,9 +2415,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Recursive",
@@ -2547,9 +2425,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Show Hidden",
@@ -2563,9 +2438,6 @@
                                     "type": "string"
                                 },
                                 "type": "array"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "File Types",
@@ -2575,9 +2447,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Max Depth",
@@ -2587,9 +2456,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Include Size",
@@ -2600,9 +2466,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Include Permissions",
@@ -2613,9 +2476,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Sort By",
@@ -2626,9 +2486,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Sort Desc",
@@ -2696,9 +2553,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Start Line",
@@ -2708,9 +2562,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "End Line",
@@ -2720,9 +2571,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Sudo",
@@ -2779,9 +2627,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Sudo",
@@ -2835,9 +2680,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Sudo",
@@ -2929,9 +2771,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/FileContentEncoding"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Content encoding: utf-8 for text, base64 for binary data",
@@ -2941,9 +2780,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Append",
@@ -2954,9 +2790,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Leading Newline",
@@ -2967,9 +2800,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Trailing Newline",
@@ -2980,9 +2810,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Sudo",
@@ -3009,9 +2836,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Bytes Written",
@@ -3071,9 +2895,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Mimetype"
@@ -3085,9 +2906,6 @@
                                     "type": "string"
                                 },
                                 "type": "array"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Sizes"
@@ -3120,9 +2938,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/Annotations"
-                            },
-                            {
-                                "type": "null"
                             }
                         ]
                     },
@@ -3131,9 +2946,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Meta"
@@ -3155,9 +2967,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Session Id",
@@ -3167,9 +2976,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Kernel Name",
@@ -3221,9 +3027,6 @@
                                 "type": "integer",
                                 "maximum": 300.0,
                                 "minimum": 1.0
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Timeout",
@@ -3234,9 +3037,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Kernel Name",
@@ -3247,9 +3047,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Session Id",
@@ -3284,9 +3081,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Execution Count",
@@ -3309,9 +3103,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Msg Id",
@@ -3394,9 +3185,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Name",
@@ -3406,9 +3194,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Text",
@@ -3419,9 +3204,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Data",
@@ -3432,9 +3214,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Metadata",
@@ -3444,9 +3223,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Execution Count",
@@ -3456,9 +3232,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Ename",
@@ -3468,9 +3241,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Evalue",
@@ -3483,9 +3253,6 @@
                                     "type": "string"
                                 },
                                 "type": "array"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Traceback",
@@ -3553,9 +3320,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Meta"
@@ -3564,9 +3328,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Nextcursor"
@@ -3696,9 +3457,6 @@
                                 "type": "integer",
                                 "maximum": 300.0,
                                 "minimum": 1.0
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Timeout",
@@ -3709,9 +3467,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Stdin",
@@ -3724,9 +3479,6 @@
                                     "type": "string"
                                 },
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Files",
@@ -3756,9 +3508,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Execution Count",
@@ -3816,9 +3565,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Name",
@@ -3828,9 +3574,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Text",
@@ -3840,9 +3583,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Ename",
@@ -3852,9 +3592,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Evalue",
@@ -3867,9 +3604,6 @@
                                     "type": "string"
                                 },
                                 "type": "array"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Traceback",
@@ -3880,9 +3614,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Data",
@@ -3893,9 +3624,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Metadata",
@@ -3937,9 +3665,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Runtime Directory",
@@ -3949,9 +3674,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Error",
@@ -3991,13 +3713,11 @@
                 "properties": {
                     "width": {
                         "type": "integer",
-                        "exclusiveMinimum": 0.0,
                         "title": "Width",
                         "description": "Screen width in pixels."
                     },
                     "height": {
                         "type": "integer",
-                        "exclusiveMinimum": 0.0,
                         "title": "Height",
                         "description": "Screen height in pixels."
                     }
@@ -4019,9 +3739,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Title"
@@ -4036,9 +3753,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Description"
@@ -4047,9 +3761,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Mimetype"
@@ -4058,9 +3769,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Size"
@@ -4072,9 +3780,6 @@
                                     "$ref": "#/components/schemas/Icon"
                                 },
                                 "type": "array"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Icons"
@@ -4083,9 +3788,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/Annotations"
-                            },
-                            {
-                                "type": "null"
                             }
                         ]
                     },
@@ -4094,9 +3796,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Meta"
@@ -4129,9 +3828,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4140,10 +3836,7 @@
                     },
                     "data": {
                         "anyOf": [
-                            {},
-                            {
-                                "type": "null"
-                            }
+                            {}
                         ],
                         "title": "Data",
                         "description": "Data returned from the operation"
@@ -4165,9 +3858,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4178,9 +3868,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/ActiveSessionsResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4201,9 +3888,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4214,9 +3898,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/ActiveShellSessionsResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4237,9 +3918,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4250,9 +3928,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/BrowserInfoResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4273,9 +3948,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4286,9 +3958,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/CallToolResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4309,9 +3978,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4322,9 +3988,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/CodeExecuteResponse"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4345,9 +4008,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4358,9 +4018,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/CodeInfoResponse"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4381,9 +4038,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4394,9 +4048,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/FileFindResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4417,9 +4068,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4430,9 +4078,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/FileListResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4453,9 +4098,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4466,9 +4108,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/FileReadResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4489,9 +4128,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4502,9 +4138,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/FileReplaceResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4525,9 +4158,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4538,9 +4168,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/FileSearchResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4561,9 +4188,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4574,9 +4198,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/FileUploadResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4597,9 +4218,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4610,9 +4228,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/FileWriteResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4633,9 +4248,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4646,9 +4258,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/JupyterCreateSessionResponse"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4669,9 +4278,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4682,9 +4288,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/JupyterExecuteResponse"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4705,9 +4308,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4718,9 +4318,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/JupyterInfoResponse"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4741,9 +4338,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4754,9 +4348,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/ListToolsResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4777,9 +4368,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4793,9 +4381,6 @@
                                     "type": "string"
                                 },
                                 "type": "array"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Data",
@@ -4817,9 +4402,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4830,9 +4412,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/NodeJSExecuteResponse"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4853,9 +4432,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4866,9 +4442,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/NodeJSRuntimeInfo"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4889,9 +4462,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4902,9 +4472,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/ShellCommandResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4925,9 +4492,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4938,9 +4502,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/ShellCreateSessionResponse"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4961,9 +4522,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -4974,9 +4532,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/ShellKillResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -4997,9 +4552,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -5010,9 +4562,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/ShellViewResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -5033,9 +4582,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -5046,9 +4592,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/ShellWaitResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -5069,9 +4612,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -5082,9 +4622,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/ShellWriteResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -5105,9 +4642,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -5118,9 +4652,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/StrReplaceEditorResult"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "description": "Data returned from the operation"
@@ -5141,9 +4672,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -5154,9 +4682,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Data",
@@ -5178,9 +4703,6 @@
                         "anyOf": [
                             {
                                 "type": "number"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "X"
@@ -5189,9 +4711,6 @@
                         "anyOf": [
                             {
                                 "type": "number"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Y"
@@ -5262,9 +4781,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Message",
@@ -5273,10 +4789,7 @@
                     },
                     "data": {
                         "anyOf": [
-                            {},
-                            {
-                                "type": "null"
-                            }
+                            {}
                         ],
                         "title": "Data",
                         "description": "Data returned from the operation"
@@ -5370,9 +4883,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Output",
@@ -5385,9 +4895,6 @@
                                     "$ref": "#/components/schemas/ConsoleRecord"
                                 },
                                 "type": "array"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Console",
@@ -5397,9 +4904,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Exit Code",
@@ -5426,9 +4930,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Exec Dir",
@@ -5466,9 +4967,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Id",
@@ -5478,9 +4976,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Exec Dir",
@@ -5501,9 +4996,6 @@
                         "anyOf": [
                             {
                                 "type": "number"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Timeout",
@@ -5585,9 +5077,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Current Command",
@@ -5639,9 +5128,6 @@
                                     "$ref": "#/components/schemas/ConsoleRecord"
                                 },
                                 "type": "array"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Console",
@@ -5655,9 +5141,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Command",
@@ -5667,9 +5150,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Exit Code",
@@ -5696,9 +5176,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Seconds",
@@ -5790,9 +5267,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "File Text",
@@ -5802,9 +5276,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Old Str",
@@ -5814,9 +5285,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "New Str",
@@ -5826,9 +5294,6 @@
                         "anyOf": [
                             {
                                 "type": "integer"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Insert Line",
@@ -5841,9 +5306,6 @@
                                     "type": "integer"
                                 },
                                 "type": "array"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "View Range",
@@ -5870,9 +5332,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Error",
@@ -5892,9 +5351,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Old Content",
@@ -5904,9 +5360,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "New Content",
@@ -5983,9 +5436,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/Annotations"
-                            },
-                            {
-                                "type": "null"
                             }
                         ]
                     },
@@ -5994,9 +5444,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Meta"
@@ -6023,9 +5470,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Mimetype"
@@ -6035,9 +5479,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Meta"
@@ -6066,9 +5507,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Title"
@@ -6077,9 +5515,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Description"
@@ -6094,9 +5529,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Outputschema"
@@ -6108,9 +5540,6 @@
                                     "$ref": "#/components/schemas/Icon"
                                 },
                                 "type": "array"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Icons"
@@ -6119,9 +5548,6 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/ToolAnnotations"
-                            },
-                            {
-                                "type": "null"
                             }
                         ]
                     },
@@ -6130,9 +5556,6 @@
                             {
                                 "additionalProperties": true,
                                 "type": "object"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Meta"
@@ -6153,9 +5576,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Title"
@@ -6164,9 +5584,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Readonlyhint"
@@ -6175,9 +5592,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Destructivehint"
@@ -6186,9 +5600,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Idempotenthint"
@@ -6197,9 +5608,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Openworldhint"
@@ -6240,9 +5648,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Ver"
@@ -6251,9 +5656,6 @@
                         "anyOf": [
                             {
                                 "type": "string"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Bin"
@@ -6287,9 +5689,6 @@
                         "anyOf": [
                             {
                                 "type": "boolean"
-                            },
-                            {
-                                "type": "null"
                             }
                         ],
                         "title": "Use Clipboard",
@@ -6361,7 +5760,6 @@
                     },
                     "duration": {
                         "type": "number",
-                        "exclusiveMinimum": 0.0,
                         "title": "Duration",
                         "description": "Duration to wait in seconds"
                     }
