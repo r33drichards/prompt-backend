@@ -188,12 +188,18 @@
         packages.docker = pkgs.dockerTools.buildLayeredImage {
           name = "rust-redis-webserver";
           tag = "latest";
-          contents = [ self.packages.${system}.default ];
+          contents = [
+            self.packages.${system}.default
+            pkgs.cacert
+          ];
           config = {
             Cmd = [ "${self.packages.${system}.default}/bin/rust-redis-webserver" ];
             ExposedPorts = {
               "8000/tcp" = {};
             };
+            Env = [
+              "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+            ];
           };
         };
 
