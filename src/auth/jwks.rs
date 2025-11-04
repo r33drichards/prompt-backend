@@ -1,6 +1,7 @@
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use reqwest;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -17,11 +18,35 @@ pub struct Jwks {
     pub keys: Vec<Jwk>,
 }
 
+fn deserialize_audience<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: Value = Deserialize::deserialize(deserializer)?;
+    match value {
+        Value::String(s) => Ok(Some(vec![s])),
+        Value::Array(arr) => {
+            let strings: Result<Vec<String>, _> = arr
+                .into_iter()
+                .map(|v| {
+                    v.as_str()
+                        .map(|s| s.to_string())
+                        .ok_or_else(|| serde::de::Error::custom("audience array contains non-string"))
+                })
+                .collect();
+            strings.map(Some)
+        }
+        Value::Null => Ok(None),
+        _ => Err(serde::de::Error::custom("invalid audience type")),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,
     pub iss: String,
-    pub aud: Option<String>,
+    #[serde(deserialize_with = "deserialize_audience")]
+    pub aud: Option<Vec<String>>,
     pub exp: u64,
     pub iat: u64,
     pub email: Option<String>,
@@ -88,9 +113,8 @@ impl JwksCache {
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_issuer(&[&self.issuer]);
         validation.validate_exp = true;
-        // Accept both Keycloak's default "account" audience and our custom "prompt-backend" audience
-        // TODO: Once Keycloak is configured to include "prompt-backend", remove "account" from this list
-        validation.set_audience(&["account", "prompt-backend"]);
+        // Validate that tokens are specifically intended for prompt-backend
+        validation.set_audience(&["prompt-backend"]);
 
         let token_data = decode::<Claims>(token, &decoding_key, &validation)
             .map_err(|e| format!("Token validation failed: {}", e))?;
