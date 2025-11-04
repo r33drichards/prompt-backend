@@ -107,7 +107,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Spawn background tasks if --bg-tasks flag is present
     if !bg_task_names.is_empty() {
-        let task_database_url = Some(database_url);
+        let task_database_url = Some(database_url.clone());
         let bg_tasks_handle = tokio::spawn(async move {
             info!("Starting background tasks");
             let task_context = bg_tasks::TaskContext::new(task_database_url)
@@ -117,6 +117,22 @@ async fn main() -> anyhow::Result<()> {
         });
 
         handles.push(bg_tasks_handle);
+
+        // Spawn session poller if outbox-publisher is enabled
+        let poller_database_url = database_url.clone();
+        let poller_handle = tokio::spawn(async move {
+            info!("Starting session poller");
+
+            // Create SeaORM database connection for the poller
+            let db = establish_connection(&poller_database_url).await?;
+
+            // Create PostgreSQL pool for apalis storage
+            let pool = apalis_sql::postgres::PgPool::connect(&poller_database_url).await?;
+
+            bg_tasks::session_poller::run_session_poller(db, pool).await
+        });
+
+        handles.push(poller_handle);
     }
 
     // If no services specified, error out

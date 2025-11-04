@@ -1,4 +1,5 @@
 pub mod outbox_publisher;
+pub mod session_poller;
 
 use anyhow::Result;
 use apalis::prelude::*;
