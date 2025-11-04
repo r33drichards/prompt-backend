@@ -184,8 +184,27 @@
           inherit rustToolchain;
         };
 
-        # Docker image (optional, uses Dockerfile)
+        # Docker image (builds compressed tarball)
         packages.docker = pkgs.dockerTools.buildLayeredImage {
+          name = "rust-redis-webserver";
+          tag = "latest";
+          contents = [
+            self.packages.${system}.default
+            pkgs.cacert
+          ];
+          config = {
+            Cmd = [ "${self.packages.${system}.default}/bin/rust-redis-webserver" ];
+            ExposedPorts = {
+              "8000/tcp" = {};
+            };
+            Env = [
+              "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+            ];
+          };
+        };
+
+        # Docker image streamer (for CI and direct loading)
+        packages.dockerStream = pkgs.dockerTools.streamLayeredImage {
           name = "rust-redis-webserver";
           tag = "latest";
           contents = [
@@ -207,6 +226,20 @@
         apps.generateTypescriptClient = {
           type = "app";
           program = "${generateTypescriptClientScript}/bin/generate-typescript-client";
+        };
+
+        # Stream and load Docker image directly into Docker daemon
+        apps.loadDockerImage = {
+          type = "app";
+          program = toString (pkgs.writeShellScript "load-docker-image" ''
+            set -e
+            echo "🐳 Streaming Docker image into Docker daemon..."
+            ${self.packages.${system}.dockerStream} | ${pkgs.docker}/bin/docker image load
+            echo "✅ Image loaded successfully!"
+            echo ""
+            echo "Run with:"
+            echo "  docker run --rm -p 8000:8000 rust-redis-webserver:latest"
+          '');
         };
       }
     );

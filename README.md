@@ -488,7 +488,20 @@ nix build
 
 # Run the built binary
 ./result/bin/rust-redis-webserver
+
+# Build and load Docker image (recommended)
+nix run .#loadDockerImage
+
+# Or build Docker image tarball
+nix build .#docker
+docker image load -i result
+
+# Or stream Docker image (efficient for CI)
+nix build .#dockerStream
+./result | docker image load
 ```
+
+See [docs/docker-tools.md](docs/docker-tools.md) for detailed documentation on Docker image building with Nix.
 
 ## CI/CD
 
