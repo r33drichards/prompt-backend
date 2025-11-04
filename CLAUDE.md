@@ -1,0 +1,1 @@
+- use nix for managing rust deps and running cargo

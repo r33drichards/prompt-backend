@@ -5,3 +5,6 @@ target/
 generated-client/
 /openapi.json
 .direnv
+
+# Git worktrees
+.worktrees/

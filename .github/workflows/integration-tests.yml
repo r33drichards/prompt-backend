@@ -65,3 +65,51 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker compose down -v --remove-orphans
+
+  sandbox-integration-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Enable Nix flakes
+        run: |
+          mkdir -p ~/.config/nix
+          echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
+
+      # - name: Setup Nix cache
+      #   uses: cachix/cachix-action@v15
+      #   with:
+      #     name: rust-redis-webserver
+      #     authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      #     skipPush: true
+
+      - name: Pull sandbox Docker image
+        run: |
+          echo "🐳 Pulling wholelottahoopla/sandbox:latest"
+          docker pull wholelottahoopla/sandbox:latest
+
+      - name: Make test script executable
+        run: chmod +x scripts/test_sandbox_integration.sh
+
+      - name: Run sandbox integration tests
+        run: scripts/test_sandbox_integration.sh
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs sandbox || echo "No sandbox container found"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop sandbox 2>/dev/null || true
+          docker rm sandbox 2>/dev/null || true

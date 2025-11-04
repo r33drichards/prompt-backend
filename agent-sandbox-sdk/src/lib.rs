@@ -5,5 +5,7 @@
 
 #![allow(clippy::all)]
 #![allow(unused_imports, dead_code)]
+#![allow(irrefutable_let_patterns)]
+#![allow(unreachable_patterns)]
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
