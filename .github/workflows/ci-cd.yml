@@ -111,10 +111,10 @@ jobs:
     container: ghcr.io/railwayapp/cli:latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     env:
-      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      SVC_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
+      RAILWAY_TOKEN: ${{  secrets.RAILWAY_API_KEY }}
+      SVC_ID: eb78de67-f81d-4d16-b767-802acf609d66
     steps:
       - uses: actions/checkout@v4
 
       - name: Deploy to Railway
-        run: railway up --service=${{ env.SVC_ID }}
+        run: railway up --service=eb78de67-f81d-4d16-b767-802acf609d66
