@@ -102,7 +102,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
         // checkout the target branch
         sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-            command: format!("git checkout {}", _session_model.target_branch.clone().unwrap()),
+            command: format!(
+                "git checkout {}",
+                _session_model.target_branch.clone().unwrap()
+            ),
             async_mode: false,
             id: None,
             timeout: Some(30.0 as f64),
@@ -226,7 +229,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                         msgs.push(json);
 
                         // Update session messages in database, wrapping in messages.messages structure
-                        let mut active_session: session::ActiveModel = session_model_clone.clone().into();
+                        let mut active_session: session::ActiveModel =
+                            session_model_clone.clone().into();
                         let messages_wrapper = serde_json::json!({
                             "messages": msgs.clone()
                         });
