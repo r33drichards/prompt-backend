@@ -1,6 +1,8 @@
 use apalis::prelude::Storage;
 use apalis_sql::postgres::{PgPool, PostgresStorage};
-use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
+};
 use std::time::Duration;
 use tracing::{error, info};
 use uuid::Uuid;
@@ -80,4 +82,3 @@ async fn update_session_status_to_pending(
 
     Ok(())
 }
-
