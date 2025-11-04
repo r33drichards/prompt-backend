@@ -201,18 +201,26 @@ pub async fn process_outbox_job(
                     if !stderr.is_empty() {
                         info!("Claude Code stderr for session {}: {}", session_id, stderr);
                     }
+                    let mut msgs = _session_model.messages.clone().unwrap_or_default().into_iter(). collect::<Vec<serde_json::Value>>();
 
                     // Log each line of stream-json output
                     for line in stdout.lines() {
                         info!("Claude Code output for session {}: {}", session_id, line);
 
-                        // TODO: Parse JSON and extract messages
-                        // TODO: Append to session.messages in database
+                        let json = serde_json::from_str::<serde_json::Value>(line).unwrap();
+                        msgs.push(json.into());
+
+                        // set session.messages to the new messages
+                        _session_model.messages = Some(msgs.into());
+                        _session_model.update(&ctx.db).await.map_err(|e| {
+                            error!("Failed to update session {} messages in database: {}", session_id, e);
+                            Error::Failed(Box::new(e))
+                        })?;
+             
+
                     }
 
-                    // TODO: Update session.messages in database
-                    // For now, just log that we would update
-                    info!("Would update session {} messages in database", session_id);
+
                 }
                 Ok(Err(e)) => {
                     error!("Failed to execute Claude Code CLI for session {}: {}", session_id, e);
