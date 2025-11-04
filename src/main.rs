@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 use dotenv::dotenv;
 use tracing::info;
 
+use crate::auth::JwksCache;
 use crate::db::establish_connection;
 
 use rocket_okapi::settings::UrlObject;
@@ -14,6 +15,7 @@ use rocket_cors::{AllowedOrigins, CorsOptions};
 
 use sea_orm_migration::prelude::*;
 
+mod auth;
 mod bg_tasks;
 mod db;
 mod entities;
@@ -48,6 +50,7 @@ enum Commands {
 fn generate_openapi_spec() -> String {
     let settings = rocket_okapi::settings::OpenApiSettings::new();
     let spec = rocket_okapi::openapi_spec![
+        handlers::health::health,
         handlers::sessions::create,
         handlers::sessions::read,
         handlers::sessions::list,
@@ -152,9 +155,36 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
         .expect("Failed to run migrations");
     println!("Migrations completed successfully");
 
-    // Configure CORS to allow all origins
+    // Initialize JWKS cache
+    let keycloak_issuer = std::env::var("KEYCLOAK_ISSUER")
+        .expect("KEYCLOAK_ISSUER must be set");
+    let keycloak_jwks_uri = std::env::var("KEYCLOAK_JWKS_URI")
+        .expect("KEYCLOAK_JWKS_URI must be set");
+
+    let jwks_cache = JwksCache::new(keycloak_jwks_uri, keycloak_issuer);
+
+    // Pre-fetch JWKS on startup
+    println!("Fetching JWKS from Keycloak...");
+    jwks_cache.fetch_jwks().await.expect("Failed to fetch JWKS");
+    println!("JWKS fetched successfully");
+
+    // Configure CORS to allow all origins, methods, and headers
     let cors = CorsOptions::default()
         .allowed_origins(AllowedOrigins::all())
+        .allowed_methods(
+            vec![
+                rocket::http::Method::Get,
+                rocket::http::Method::Post,
+                rocket::http::Method::Put,
+                rocket::http::Method::Delete,
+                rocket::http::Method::Options,
+            ]
+            .into_iter()
+            .map(From::from)
+            .collect(),
+        )
+        .allowed_headers(rocket_cors::AllowedHeaders::all())
+        .allow_credentials(true)
         .to_cors()
         .expect("Failed to create CORS fairing");
 
@@ -166,9 +196,11 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
         })
         .attach(cors)
         .manage(db)
+        .manage(jwks_cache)
         .mount(
             "/",
             openapi_get_routes![
+                handlers::health::health,
                 handlers::sessions::create,
                 handlers::sessions::read,
                 handlers::sessions::list,

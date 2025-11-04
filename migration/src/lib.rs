@@ -5,6 +5,7 @@ mod m20250103_000001_add_title_to_session;
 mod m20250104_000001_add_session_status_to_session;
 mod m20250105_000001_add_timestamp_fields;
 mod m20250106_000001_add_git_fields_to_session;
+mod m20251103_000001_add_user_id_to_sessions;
 
 pub struct Migrator;
 
@@ -17,6 +18,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20250104_000001_add_session_status_to_session::Migration),
             Box::new(m20250105_000001_add_timestamp_fields::Migration),
             Box::new(m20250106_000001_add_git_fields_to_session::Migration),
+            Box::new(m20251103_000001_add_user_id_to_sessions::Migration),
         ]
     }
 }

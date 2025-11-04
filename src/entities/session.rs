@@ -28,6 +28,8 @@ pub struct Model {
     pub updated_at: DateTimeWithTimeZone,
     #[sea_orm(nullable)]
     pub deleted_at: Option<DateTimeWithTimeZone>,
+    #[sea_orm(column_name = "user_id")]
+    pub user_id: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
