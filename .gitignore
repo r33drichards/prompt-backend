@@ -6,3 +6,4 @@ generated-client/
 /openapi.json
 .direnv/
 result*
+.worktrees
