@@ -181,8 +181,8 @@
       "linkOnly": false,
       "firstBrokerLoginFlowAlias": "first broker login",
       "config": {
-        "clientId": "Ov23liE4IyYqO8GfWpHi",
-        "clientSecret": "0816cb0fc4cd3d57fa156cbdbbd00e2ca023f884",
+        "clientId": "",
+        "clientSecret": "",
         "defaultScope": "user:email",
         "syncMode": "IMPORT",
         "useJwksUrl": "true"
