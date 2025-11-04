@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
-echo "Building and starting services..."
-docker compose build
+echo "Building Docker image with Nix..."
+nix build .#docker
+
+echo "Loading Docker image..."
+docker load < result
+
+echo "Starting services..."
 docker compose up -d
 
 echo "Waiting for webserver to be ready..."
