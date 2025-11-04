@@ -1,16 +1,20 @@
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::State;
-use rocket_okapi::request::{OpenApiFromRequest, RequestHeaderInput};
 use rocket_okapi::gen::OpenApiGenerator;
-use rocket_okapi::okapi::openapi3::{Responses, SecurityRequirement, SecurityScheme, SecuritySchemeData};
+use rocket_okapi::okapi::openapi3::{
+    Responses, SecurityRequirement, SecurityScheme, SecuritySchemeData,
+};
+use rocket_okapi::request::{OpenApiFromRequest, RequestHeaderInput};
 
 use super::jwks::JwksCache;
 
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUser {
     pub user_id: String,
+    #[allow(dead_code)]
     pub email: Option<String>,
+    #[allow(dead_code)]
     pub name: Option<String>,
 }
 
@@ -44,7 +48,10 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         }
 
         let auth_header = auth_header.unwrap();
-        tracing::debug!("Authorization header: {}", &auth_header[..20.min(auth_header.len())]);
+        tracing::debug!(
+            "Authorization header: {}",
+            &auth_header[..20.min(auth_header.len())]
+        );
 
         if !auth_header.starts_with("Bearer ") {
             tracing::warn!("Invalid Authorization header format: {}", auth_header);
@@ -64,11 +71,11 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                     email: claims.email,
                     name: claims.name,
                 })
-            },
+            }
             Err(e) => {
                 tracing::error!("Token validation failed: {}", e);
                 Outcome::Error((Status::Unauthorized, e))
-            },
+            }
         }
     }
 }

@@ -32,10 +32,7 @@ pub async fn process_session_job(job: SessionJob) -> Result<(), Error> {
     // Simulate some work
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
-    info!(
-        "Completed session job for session_id: {}",
-        job.session_id
-    );
+    info!("Completed session job for session_id: {}", job.session_id);
 
     Ok(())
 }

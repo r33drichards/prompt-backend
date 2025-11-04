@@ -1,6 +1,6 @@
+use rocket_okapi::okapi::schemars::{self, JsonSchema};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
-use rocket_okapi::okapi::schemars::{self, JsonSchema};
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "session")]
@@ -37,7 +37,9 @@ pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema,
+)]
 #[sea_orm(rs_type = "String", db_type = "String(Some(50))")]
 pub enum InboxStatus {
     #[sea_orm(string_value = "pending")]
@@ -50,7 +52,9 @@ pub enum InboxStatus {
     Archived,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema,
+)]
 #[sea_orm(rs_type = "String", db_type = "String(Some(50))")]
 pub enum SessionStatus {
     #[sea_orm(string_value = "active")]

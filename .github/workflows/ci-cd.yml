@@ -1,0 +1,90 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  IMAGE_NAME: wholelottahoopla/prompt-backend
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Run unit tests
+        run: nix develop --command cargo test --all-targets
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Check formatting
+        run: nix develop --command cargo fmt -- --check
+
+      - name: Run clippy
+        run: nix develop --command cargo clippy -- -D warnings
+
+
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: wholelottahoopla
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Load and push Docker image
+        run: |
+          docker load < docker-image.tar.gz
+
+          # Tag with commit SHA
+          docker tag rust-redis-webserver:latest ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+          # Tag with latest
+          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.IMAGE_NAME }}:latest
+
+          echo "✅ Pushed images:"
+          echo "   - ${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "   - ${{ env.IMAGE_NAME }}:latest"
+
+  # Uncomment this job if you want to deploy to Railway
+  deploy-railway:
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    steps:
+      - name: Trigger Railway deployment
+        env:
+          RAILWAY_API_KEY: ${{ secrets.RAILWAY_API_KEY }}
+        run: |
+          curl --request POST \
+            --url https://backboard.railway.app/graphql/v2 \
+            --header "Authorization: Bearer $RAILWAY_API_KEY" \
+            --header 'Content-Type: application/json' \
+            --data '{
+              "query": "mutation deploymentRedeploy($id: String!) {\n  deploymentRedeploy(id: $id) {\n    id\n  }\n}",
+              "variables": {
+                "id": "eb78de67-f81d-4d16-b767-802acf609d66"
+              },
+              "operationName": "deploymentRedeploy"
+            }'

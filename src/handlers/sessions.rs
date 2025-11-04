@@ -1,15 +1,20 @@
 use rocket::serde::json::Json;
-use rocket::State;
-use rocket_okapi::openapi;
-use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket::serde::{Deserialize, Serialize};
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set, NotSet, QueryOrder, QueryFilter, ColumnTrait};
+use rocket::State;
+use rocket_okapi::okapi::schemars::JsonSchema;
+use rocket_okapi::openapi;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, NotSet, QueryFilter,
+    QueryOrder, Set,
+};
 use uuid::Uuid;
 
-use crate::entities::session::{self, Entity as Session, Model as SessionModel, InboxStatus, SessionStatus};
+use crate::auth::AuthenticatedUser;
+use crate::entities::session::{
+    self, Entity as Session, InboxStatus, Model as SessionModel, SessionStatus,
+};
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
-use crate::auth::AuthenticatedUser;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct CreateSessionInput {
@@ -110,37 +115,31 @@ pub async fn create(
     let id = Uuid::new_v4();
 
     let parent = match &input.parent {
-        Some(p) => Some(Uuid::parse_str(p)
-            .map_err(|_| Error::bad_request("Invalid parent UUID format".to_string()))?),
+        Some(p) => Some(
+            Uuid::parse_str(p)
+                .map_err(|_| Error::bad_request("Invalid parent UUID format".to_string()))?,
+        ),
         None => None,
     };
 
     let prompt = "todo";
 
     // Generate title using Anthropic Haiku
-    let title = anthropic::generate_session_title(
-        &input.repo,
-        &input.target_branch,
-        &prompt,
-    )
-    .await
-    .unwrap_or_else(|e| {
-        tracing::warn!("Failed to generate session title: {}", e);
-        "Untitled Session".to_string()
-    });
+    let title = anthropic::generate_session_title(&input.repo, &input.target_branch, prompt)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to generate session title: {}", e);
+            "Untitled Session".to_string()
+        });
 
-    // Generate branch name 
-    let generated_branch = anthropic::generate_branch_name(
-        &input.repo,
-        &input.target_branch,
-        &prompt,
-        &id.to_string(),
-    )
-    .await
-    .unwrap_or_else(|e| {
-        tracing::warn!("Failed to generate branch name: {}", e);
-        format!("claude/session-{}", &id.to_string()[..24])
-    });
+    // Generate branch name
+    let generated_branch =
+        anthropic::generate_branch_name(&input.repo, &input.target_branch, prompt, &id.to_string())
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("Failed to generate branch name: {}", e);
+                format!("claude/session-{}", &id.to_string()[..24])
+            });
 
     let new_session = session::ActiveModel {
         id: Set(id),
@@ -177,8 +176,8 @@ pub async fn read(
     db: &State<DatabaseConnection>,
     id: String,
 ) -> OResult<ReadSessionOutput> {
-    let uuid = Uuid::parse_str(&id)
-        .map_err(|_| Error::bad_request("Invalid UUID format".to_string()))?;
+    let uuid =
+        Uuid::parse_str(&id).map_err(|_| Error::bad_request("Invalid UUID format".to_string()))?;
 
     match Session::find_by_id(uuid)
         .filter(session::Column::UserId.eq(&user.user_id))
@@ -186,7 +185,7 @@ pub async fn read(
         .await
     {
         Ok(Some(session)) => Ok(Json(ReadSessionOutput {
-            session: session.into()
+            session: session.into(),
         })),
         Ok(None) => Err(Error::not_found("Session not found".to_string())),
         Err(e) => Err(Error::database_error(e.to_string())),
@@ -207,7 +206,7 @@ pub async fn list(
         .await
     {
         Ok(sessions) => Ok(Json(ListSessionsOutput {
-            sessions: sessions.into_iter().map(|s| s.into()).collect()
+            sessions: sessions.into_iter().map(|s| s.into()).collect(),
         })),
         Err(e) => Err(Error::database_error(e.to_string())),
     }
@@ -222,12 +221,14 @@ pub async fn update(
     id: String,
     input: Json<UpdateSessionInput>,
 ) -> OResult<UpdateSessionOutput> {
-    let uuid = Uuid::parse_str(&id)
-        .map_err(|_| Error::bad_request("Invalid UUID format".to_string()))?;
+    let uuid =
+        Uuid::parse_str(&id).map_err(|_| Error::bad_request("Invalid UUID format".to_string()))?;
 
     let parent = match &input.parent {
-        Some(p) => Some(Uuid::parse_str(p)
-            .map_err(|_| Error::bad_request("Invalid parent UUID format".to_string()))?),
+        Some(p) => Some(
+            Uuid::parse_str(p)
+                .map_err(|_| Error::bad_request("Invalid parent UUID format".to_string()))?,
+        ),
         None => None,
     };
 
@@ -271,8 +272,8 @@ pub async fn delete(
     db: &State<DatabaseConnection>,
     id: String,
 ) -> OResult<DeleteSessionOutput> {
-    let uuid = Uuid::parse_str(&id)
-        .map_err(|_| Error::bad_request("Invalid UUID format".to_string()))?;
+    let uuid =
+        Uuid::parse_str(&id).map_err(|_| Error::bad_request("Invalid UUID format".to_string()))?;
 
     // Verify session exists and belongs to user before deleting
     let existing_session = Session::find_by_id(uuid)

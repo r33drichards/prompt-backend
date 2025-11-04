@@ -74,7 +74,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             command: "gh auth login --with-token TODO".to_string(),
             async_mode: false,
             id: None,
-            timeout: Some(30.0 as f64),
+            timeout: Some(30.0_f64),
             exec_dir: Some(String::from("/home/gem")),
         })
         .await
@@ -91,7 +91,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             ),
             async_mode: false,
             id: None,
-            timeout: Some(30.0 as f64),
+            timeout: Some(30.0_f64),
             exec_dir: Some(String::from("/home/gem")),
         })
         .await
@@ -102,10 +102,13 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
         // checkout the target branch
         sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-            command: format!("git checkout {}", _session_model.target_branch.clone().unwrap()),
+            command: format!(
+                "git checkout {}",
+                _session_model.target_branch.clone().unwrap()
+            ),
             async_mode: false,
             id: None,
-            timeout: Some(30.0 as f64),
+            timeout: Some(30.0_f64),
             exec_dir: Some(String::from("/home/gem/repo")),
         })
         .await
@@ -123,7 +126,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             command: format!("git checkout {} || git switch -c {}", branch, branch),
             async_mode: false,
             id: None,
-            timeout: Some(30.0 as f64),
+            timeout: Some(30.0_f64),
             exec_dir: Some(String::from("/home/gem/repo")),
         })
         .await
@@ -215,7 +218,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                         .as_ref()
                         .and_then(|v| v.get("messages"))
                         .and_then(|v| v.as_array())
-                        .map(|arr| arr.clone())
+                        .cloned()
                         .unwrap_or_default();
 
                     // Log each line of stream-json output
@@ -226,7 +229,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                         msgs.push(json);
 
                         // Update session messages in database, wrapping in messages.messages structure
-                        let mut active_session: session::ActiveModel = session_model_clone.clone().into();
+                        let mut active_session: session::ActiveModel =
+                            session_model_clone.clone().into();
                         let messages_wrapper = serde_json::json!({
                             "messages": msgs.clone()
                         });
