@@ -35,7 +35,6 @@ jobs:
 
 
   build:
-    needs: [test]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     steps:
@@ -66,7 +65,7 @@ jobs:
           retention-days: 1
 
   deploy:
-    needs: [build]
+    needs: [build, test]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     steps:
