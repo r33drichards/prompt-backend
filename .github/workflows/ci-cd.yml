@@ -108,13 +108,20 @@ jobs:
   deploy-railway:
     needs: [deploy]
     runs-on: ubuntu-latest
-    container: ghcr.io/railwayapp/cli:latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    env:
-      RAILWAY_TOKEN: ${{  secrets.RAILWAY_API_KEY }}
-      SVC_ID: eb78de67-f81d-4d16-b767-802acf609d66
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to Railway
-        run: railway up --service=eb78de67-f81d-4d16-b767-802acf609d66
+      - name: Trigger Railway deployment
+        env:
+          RAILWAY_API_KEY: ${{ secrets.RAILWAY_API_KEY }}
+        run: |
+          curl --request POST \
+            --url https://backboard.railway.app/graphql/v2 \
+            --header "Authorization: Bearer $RAILWAY_API_KEY" \
+            --header 'Content-Type: application/json' \
+            --data '{
+              "query": "mutation deploymentRedeploy($id: String!) {\n  deploymentRedeploy(id: $id) {\n    id\n  }\n}",
+              "variables": {
+                "id": "335fcf83-6098-4ca4-966f-3975d915bfc3"
+              },
+              "operationName": "deploymentRedeploy"
+            }'
