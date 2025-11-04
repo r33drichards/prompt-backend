@@ -107,22 +107,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Spawn background tasks if --bg-tasks flag is present
     if !bg_task_names.is_empty() {
-        // Determine which connections are needed based on task names
-        let needs_redis = bg_task_names.iter().any(|t| t == bg_tasks::SESSION_HANDLER);
-        let needs_postgres = bg_task_names
-            .iter()
-            .any(|t| t == bg_tasks::OUTBOX_PUBLISHER);
-
-        let task_redis_url = if needs_redis { Some(redis_url) } else { None };
-        let task_database_url = if needs_postgres {
-            Some(database_url)
-        } else {
-            None
-        };
-
+        let task_database_url = Some(database_url);
         let bg_tasks_handle = tokio::spawn(async move {
             info!("Starting background tasks");
-            let task_context = bg_tasks::TaskContext::new(task_redis_url, task_database_url)
+            let task_context = bg_tasks::TaskContext::new(task_database_url)
                 .await
                 .expect("Failed to create task context");
             task_context.run_bg_tasks(bg_task_names).await

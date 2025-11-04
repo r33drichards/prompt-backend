@@ -1,31 +1,27 @@
 pub mod outbox_publisher;
-pub mod session_handler;
 
 use anyhow::Result;
 use apalis::prelude::*;
-use apalis_redis::RedisStorage;
 use apalis_sql::postgres::{PgListen, PgPool, PostgresStorage};
 use std::time::Duration;
 use tracing::info;
 
 /// Available background task names
 pub const OUTBOX_PUBLISHER: &str = "outbox-publisher";
-pub const SESSION_HANDLER: &str = "session-handler";
 
 /// Get all available task names
 pub fn all_tasks() -> Vec<&'static str> {
-    vec![OUTBOX_PUBLISHER, SESSION_HANDLER]
+    vec![OUTBOX_PUBLISHER]
 }
 
 /// Context for running background tasks, holds optional connections to backends
 pub struct TaskContext {
-    pub redis_url: Option<String>,
     pub db: Option<PgPool>,
 }
 
 impl TaskContext {
     /// Create a new TaskContext with optional Redis and PostgreSQL connections
-    pub async fn new(redis_url: Option<String>, database_url: Option<String>) -> Result<Self> {
+    pub async fn new(database_url: Option<String>) -> Result<Self> {
         let db = if let Some(url) = database_url {
             Some(
                 PgPool::connect(&url)
@@ -36,7 +32,7 @@ impl TaskContext {
             None
         };
 
-        Ok(Self { redis_url, db })
+        Ok(Self { db })
     }
 
     /// Run background tasks based on the provided task names
@@ -114,21 +110,6 @@ impl TaskContext {
                     .data(())
                     .with_storage(storage)
                     .build_fn(outbox_publisher::process_outbox_job);
-
-                Ok(monitor.register(worker))
-            }
-            SESSION_HANDLER => {
-                let redis_url = self.redis_url.as_ref().ok_or_else(|| {
-                    anyhow::anyhow!("Redis connection required for {}", task_name)
-                })?;
-
-                let conn = apalis_redis::connect(redis_url.clone()).await?;
-                let storage = RedisStorage::new(conn);
-
-                let worker = WorkerBuilder::new(SESSION_HANDLER)
-                    .data(())
-                    .with_storage(storage)
-                    .build_fn(session_handler::process_session_job);
 
                 Ok(monitor.register(worker))
             }
