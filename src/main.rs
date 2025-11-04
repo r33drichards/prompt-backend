@@ -98,6 +98,7 @@ async fn main() -> anyhow::Result<()> {
         let server_database_url = database_url.clone();
 
         let server_handle = tokio::spawn(async move {
+            println!("Starting web server task...");
             info!("Starting web server");
             run_server(server_redis_url, server_database_url).await
         });
@@ -109,6 +110,7 @@ async fn main() -> anyhow::Result<()> {
     if !bg_task_names.is_empty() {
         let task_database_url = Some(database_url);
         let bg_tasks_handle = tokio::spawn(async move {
+            println!("Starting background tasks task...");
             info!("Starting background tasks");
             let task_context = bg_tasks::TaskContext::new(task_database_url)
                 .await
@@ -177,6 +179,8 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
         .allow_credentials(true)
         .to_cors()
         .expect("Failed to create CORS fairing");
+
+    println!("Web server initialization complete, launching Rocket on 0.0.0.0:8000...");
 
     let _ = rocket::build()
         .configure(rocket::Config {

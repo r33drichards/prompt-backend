@@ -37,6 +37,7 @@ impl TaskContext {
 
     /// Run background tasks based on the provided task names
     pub async fn run_bg_tasks(self, task_names: Vec<String>) -> Result<()> {
+        println!("Initializing background tasks: {:?}", task_names);
         info!("Starting background tasks: {:?}", task_names);
 
         // Register all requested tasks
@@ -47,11 +48,13 @@ impl TaskContext {
         }
 
         // Run monitor with graceful shutdown
+        println!("Background tasks registered, starting monitor...");
         monitor
             .on_event(|e| {
                 let worker_id = e.id();
                 match e.inner() {
                     Event::Start => {
+                        println!("Background worker [{worker_id}] started");
                         info!("Worker [{worker_id}] started");
                     }
                     Event::Error(e) => {
@@ -65,6 +68,7 @@ impl TaskContext {
             })
             .shutdown_timeout(Duration::from_millis(5000))
             .run_with_signal(async {
+                println!("Background tasks monitor running, waiting for events...");
                 info!("Background tasks monitor started");
                 tokio::signal::ctrl_c().await?;
                 info!("Background tasks monitor starting shutdown");
