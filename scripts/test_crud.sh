@@ -15,10 +15,48 @@ for i in {1..30}; do
   sleep 1
 done
 
+# Function to get access token from Keycloak
+get_access_token() {
+  local USERNAME="testuser"
+  local PASSWORD="testpass"
+  local CLIENT_ID="prompt-backend"
+  local KEYCLOAK_URL="http://localhost:8080/realms/oauth2-realm/protocol/openid-connect/token"
+
+  local TOKEN_RESPONSE=$(curl -s -X POST "$KEYCLOAK_URL" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "grant_type=password" \
+    -d "client_id=$CLIENT_ID" \
+    -d "username=$USERNAME" \
+    -d "password=$PASSWORD")
+
+  local ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+
+  if [ -z "$ACCESS_TOKEN" ]; then
+    echo "Failed to get access token. Response: $TOKEN_RESPONSE"
+    return 1
+  fi
+
+  echo "$ACCESS_TOKEN"
+}
+
+# Test 0: Verify authentication works
+echo ""
+echo "Test 0: Verifying authentication..."
+ACCESS_TOKEN=$(get_access_token)
+if [ -z "$ACCESS_TOKEN" ]; then
+  echo "✗ Test 0 failed: Could not obtain access token"
+  docker compose down -v
+  exit 1
+fi
+echo "✓ Test 0 passed: Successfully obtained access token"
+echo "Token (first 20 chars): ${ACCESS_TOKEN:0:20}..."
+
 # Test 1: Create a session
+echo ""
 echo "Test 1: Creating a session..."
 CREATE_RESPONSE=$(curl -s -X POST http://localhost:8000/sessions \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d '{"repo": "test-repo", "target_branch": "main", "messages": {"content": "test message"}}')
 echo "Create response: $CREATE_RESPONSE"
 
@@ -35,7 +73,8 @@ fi
 # Test 2: List sessions
 echo ""
 echo "Test 2: Listing sessions..."
-LIST_RESPONSE=$(curl -s http://localhost:8000/sessions)
+LIST_RESPONSE=$(curl -s http://localhost:8000/sessions \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
 echo "List response: $LIST_RESPONSE"
 
 if echo "$LIST_RESPONSE" | grep -q "$SESSION_ID"; then
@@ -49,7 +88,8 @@ fi
 # Test 3: Read a specific session
 echo ""
 echo "Test 3: Reading session by ID..."
-READ_RESPONSE=$(curl -s http://localhost:8000/sessions/$SESSION_ID)
+READ_RESPONSE=$(curl -s http://localhost:8000/sessions/$SESSION_ID \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
 echo "Read response: $READ_RESPONSE"
 
 if echo "$READ_RESPONSE" | grep -q "$SESSION_ID"; then
@@ -65,6 +105,7 @@ echo ""
 echo "Test 4: Updating the session..."
 UPDATE_RESPONSE=$(curl -s -X PUT http://localhost:8000/sessions/$SESSION_ID \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d "{\"id\": \"$SESSION_ID\", \"inbox_status\": \"Active\", \"messages\": {\"content\": \"updated message\"}, \"sbx_config\": {\"setting\": \"new_value\"}}")
 echo "Update response: $UPDATE_RESPONSE"
 
@@ -79,7 +120,8 @@ fi
 # Test 5: Verify update by reading
 echo ""
 echo "Test 5: Verifying update..."
-READ_RESPONSE2=$(curl -s http://localhost:8000/sessions/$SESSION_ID)
+READ_RESPONSE2=$(curl -s http://localhost:8000/sessions/$SESSION_ID \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
 echo "Read response after update: $READ_RESPONSE2"
 
 if echo "$READ_RESPONSE2" | grep -qi '"inbox_status":"[Aa]ctive"'; then
@@ -95,6 +137,7 @@ echo ""
 echo "Test 6: Creating another session for deletion test..."
 CREATE_RESPONSE2=$(curl -s -X POST http://localhost:8000/sessions \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d '{"repo": "test-repo", "target_branch": "main", "messages": {"content": "delete me"}}')
 echo "Create response: $CREATE_RESPONSE2"
 
@@ -110,7 +153,8 @@ fi
 # Test 7: Delete the second session
 echo ""
 echo "Test 7: Deleting the second session..."
-DELETE_RESPONSE=$(curl -s -X DELETE http://localhost:8000/sessions/$SESSION_ID2)
+DELETE_RESPONSE=$(curl -s -X DELETE http://localhost:8000/sessions/$SESSION_ID2 \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
 echo "Delete response: $DELETE_RESPONSE"
 
 if echo "$DELETE_RESPONSE" | grep -q '"success":true'; then
@@ -124,7 +168,8 @@ fi
 # Test 8: Verify deletion
 echo ""
 echo "Test 8: Verifying deletion..."
-READ_DELETED=$(curl -s -w "\n%{http_code}" http://localhost:8000/sessions/$SESSION_ID2)
+READ_DELETED=$(curl -s -w "\n%{http_code}" http://localhost:8000/sessions/$SESSION_ID2 \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
 HTTP_CODE=$(echo "$READ_DELETED" | tail -n1)
 echo "HTTP code when reading deleted session: $HTTP_CODE"
 
@@ -139,7 +184,8 @@ fi
 # Test 9: Verify first session still exists
 echo ""
 echo "Test 9: Verifying first session still exists..."
-READ_RESPONSE3=$(curl -s http://localhost:8000/sessions/$SESSION_ID)
+READ_RESPONSE3=$(curl -s http://localhost:8000/sessions/$SESSION_ID \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
 echo "Read response for first session: $READ_RESPONSE3"
 
 if echo "$READ_RESPONSE3" | grep -q "$SESSION_ID"; then
