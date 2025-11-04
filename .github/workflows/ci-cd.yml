@@ -83,23 +83,26 @@ jobs:
         with:
           name: docker-image
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: wholelottahoopla
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Load and push Docker image
+      - name: Install skopeo
         run: |
-          docker load < docker-image.tar.gz
+          sudo apt-get update
+          sudo apt-get install -y skopeo
 
-          # Tag with commit SHA
-          docker tag rust-redis-webserver:latest ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+      - name: Copy Docker image to registry with skopeo
+        env:
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          # Copy with commit SHA tag
+          skopeo copy \
+            docker-archive:docker-image.tar.gz \
+            docker://${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --dest-creds wholelottahoopla:$DOCKER_PASSWORD
 
-          # Tag with latest
-          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
-          docker push ${{ env.IMAGE_NAME }}:latest
+          # Copy with latest tag
+          skopeo copy \
+            docker-archive:docker-image.tar.gz \
+            docker://${{ env.IMAGE_NAME }}:latest \
+            --dest-creds wholelottahoopla:$DOCKER_PASSWORD
 
           echo "✅ Pushed images:"
           echo "   - ${{ env.IMAGE_NAME }}:${{ github.sha }}"
