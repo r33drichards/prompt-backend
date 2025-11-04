@@ -124,7 +124,7 @@ jobs:
             --data '{
               "query": "mutation deploymentRedeploy($id: String!) {\n  deploymentRedeploy(id: $id) {\n    id\n  }\n}",
               "variables": {
-                "id": "335fcf83-6098-4ca4-966f-3975d915bfc3"
+                "id": "ca5787a2-02eb-4b17-bc09-9b066c012b80"
               },
               "operationName": "deploymentRedeploy"
             }'
