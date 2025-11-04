@@ -52,13 +52,11 @@ pub struct KeycloakClient {
 impl KeycloakClient {
     /// Create a new Keycloak client
     pub fn new() -> Result<Self, KeycloakError> {
-        let keycloak_base_url = env::var("KEYCLOAK_URL").map_err(|_| {
-            KeycloakError::InvalidConfig("KEYCLOAK_URL not set".to_string())
-        })?;
+        let keycloak_base_url = env::var("KEYCLOAK_URL")
+            .map_err(|_| KeycloakError::InvalidConfig("KEYCLOAK_URL not set".to_string()))?;
 
-        let realm = env::var("KEYCLOAK_REALM").map_err(|_| {
-            KeycloakError::InvalidConfig("KEYCLOAK_REALM not set".to_string())
-        })?;
+        let realm = env::var("KEYCLOAK_REALM")
+            .map_err(|_| KeycloakError::InvalidConfig("KEYCLOAK_REALM not set".to_string()))?;
 
         // Get admin credentials from environment
         let admin_username = env::var("KEYCLOAK_ADMIN_USERNAME").map_err(|_| {
@@ -99,12 +97,7 @@ impl KeycloakClient {
             ("password", &self.admin_password),
         ];
 
-        let response = self
-            .http_client
-            .post(&url)
-            .form(&params)
-            .send()
-            .await?;
+        let response = self.http_client.post(&url).form(&params).send().await?;
 
         let status = response.status();
         if !status.is_success() {

@@ -72,14 +72,17 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         let sbx = sandbox_client::Client::new(api_url);
 
         // Fetch GitHub token from Keycloak using admin API
-        info!("Fetching GitHub token for user {} from Keycloak", _session_model.user_id);
+        info!(
+            "Fetching GitHub token for user {} from Keycloak",
+            _session_model.user_id
+        );
 
         let keycloak_client = KeycloakClient::new().map_err(|e| {
             error!("Failed to create Keycloak client: {}", e);
-            Error::Failed(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Keycloak client error: {}", e),
-            )))
+            Error::Failed(Box::new(std::io::Error::other(format!(
+                "Keycloak client error: {}",
+                e
+            ))))
         })?;
 
         let github_token = keycloak_client
@@ -92,14 +95,23 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                 );
                 Error::Failed(Box::new(std::io::Error::new(
                     std::io::ErrorKind::PermissionDenied,
-                    format!("Failed to get GitHub token: {}. Ensure user is linked to GitHub IdP", e),
+                    format!(
+                        "Failed to get GitHub token: {}. Ensure user is linked to GitHub IdP",
+                        e
+                    ),
                 )))
             })?;
 
-        info!("Successfully fetched GitHub token for user {}", _session_model.user_id);
+        info!(
+            "Successfully fetched GitHub token for user {}",
+            _session_model.user_id
+        );
 
         // Authenticate with GitHub using the fetched token
-        info!("Authenticating with GitHub for session {}", _session_model.id);
+        info!(
+            "Authenticating with GitHub for session {}",
+            _session_model.id
+        );
 
         // Pass the token to gh auth login via stdin
         let auth_command = format!("echo '{}' | gh auth login --with-token", github_token);
@@ -107,7 +119,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             command: auth_command,
             async_mode: false,
             id: None,
-            timeout: Some(30.0 as f64),
+            timeout: Some(30.0_f64),
             exec_dir: Some(String::from("/home/gem")),
         })
         .await
