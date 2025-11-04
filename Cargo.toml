@@ -27,6 +27,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 jsonwebtoken = "9.3"
 reqwest = { version = "0.11", features = ["json"] }
 ip-allocator-client = "0.1.0"
+# sandbox-client = { path = "agent-sandbox-sdk" }  # Disabled: OpenAPI 3.1.0 not compatible with progenitor 0.8.0
 
 # Pin base64ct to avoid edition 2024 requirement (not yet stable in Rust 1.84)
 [dependencies.base64ct]

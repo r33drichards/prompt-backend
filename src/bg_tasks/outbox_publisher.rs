@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use crate::entities::session::{self, Entity as Session, InboxStatus};
+// import agent-sandbox-sdk
+use agent_sandbox_sdk::{Client, Error};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,11 +60,34 @@ pub async fn process_outbox_job(
             Error::Failed(Box::new(e))
         })?;
 
-        info!("Borrowed sandbox IP: {:?}", borrowed_ip);
+        // Parse the response JSON to extract mcp_url and api_url
+        let mcp_json_string = borrowed_ip.item["mcp_json_string"].as_str()
+            .ok_or_else(|| Error::Failed("Missing mcp_json_string in response".into()))?;
+
+        info!("Borrowed sandbox - mcp_json_string: {}", mcp_json_string);
+
+        let api_url = borrowed_ip.item["api_url"].as_str().ok_or_else(|| Error::Failed("Missing api_url in response".into()))?;
+
+        info!("Borrowed sandbox - api_url: {}", api_url);
+
+        let sandbox_client = Client::new(api_url);
+
+        let response = sandbox_client.run_command("gh auth login --with-token todo").await.map_err(|e| {
+            error!("Failed to run command: {}", e);
+            Error::Failed(Box::new(e))
+        })?;
+
+        info!("Response: {}", response);
+
+        // TODO: Create sandbox client using the api_url
+        // NOTE: The sandbox-client crate currently has build issues due to OpenAPI 3.1.0
+        // compatibility with progenitor 0.8.0. The openapi.json needs to be regenerated
+        // with OpenAPI 3.0.3 or progenitor needs to be upgraded to support 3.1.0
+        // let sandbox_client = sandbox_client::Client::new(api_url);
 
         // TODO: Store borrowed_ip in session_model.sbx_config
-        // TODO: Use borrowed_ip to run Claude Code
-        // TODO: Call ip_client.ip_return() when done
+        // TODO: Use sandbox_client to interact with the sandbox
+        // TODO: Call ip_client.handlers_ip_return() when done
 
         // run gh auth login sbx sdk using gh auth token, hard code for initial testing 
         // clone target branch
