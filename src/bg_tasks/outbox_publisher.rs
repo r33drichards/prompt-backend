@@ -36,7 +36,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     })?;
 
     // Query the specific session
-    let session_model = Session::find_by_id(session_id)
+    let _session_model = Session::find_by_id(session_id)
         .one(&ctx.db)
         .await
         .map_err(|e| {
@@ -48,26 +48,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             Error::Failed("Session not found".into())
         })?;
 
-    // Verify session is ACTIVE
-    if session_model.inbox_status != InboxStatus::Active {
-        info!(
-            "Session {} is not active (status: {:?}), skipping",
-            session_id, session_model.inbox_status
-        );
-        return Ok(());
-    }
 
     info!("Processing active session {}", session_id);
 
-    // Mark session as Pending before processing
-    let mut active_session: session::ActiveModel = session_model.clone().into();
-    active_session.inbox_status = Set(InboxStatus::Pending);
-    let _session_model = active_session.update(&ctx.db).await.map_err(|e| {
-        error!("Failed to update session {} to Pending: {}", session_id, e);
-        Error::Failed(Box::new(e))
-    })?;
 
-    info!("Marked session {} as Pending", session_id);
 
     // get sbx config from ip-allocator
     // Read IP_ALLOCATOR_URL from environment, e.g., "http://localhost:8000"
