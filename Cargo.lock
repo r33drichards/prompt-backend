@@ -624,8 +624,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "145052bdd345b87320e369255277e3fb5152762ad123a901ef5c262dd38fe8d2"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -3209,6 +3211,7 @@ dependencies = [
  "rocket",
  "rocket_cors",
  "rocket_okapi",
+ "sandbox-client",
  "schemars",
  "sea-orm",
  "sea-orm-migration",
@@ -3337,6 +3340,22 @@ name = "ryu"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
+
+[[package]]
+name = "sandbox-client"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "futures",
+ "prettyplease",
+ "progenitor",
+ "progenitor-client",
+ "reqwest 0.12.24",
+ "serde",
+ "serde_json",
+ "syn 2.0.106",
+ "tokio",
+]
 
 [[package]]
 name = "schannel"

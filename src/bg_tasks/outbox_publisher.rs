@@ -3,7 +3,8 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-// import agent-sandbox-sdk
+use sandbox_client::types::ShellExecRequest;
+use crate::entities::session::Model as SessionModel;
 
 use crate::entities::session::{self, Entity as Session, InboxStatus};
 
@@ -70,13 +71,56 @@ pub async fn process_outbox_job(
 
         info!("Borrowed sandbox - api_url: {}", api_url);
 
+        // Create sandbox client using the api_url
+        let sbx = sandbox_client::Client::new(api_url);
+
+        sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+            command: "gh auth login --with-token TODO".to_string(),
+            async_mode: false,
+            id: None,
+            timeout: Some(30.0 as f64),
+            exec_dir: Some(String::from("/home/gem")),
+        }).await.map_err(|e| {
+            error!("Failed to execute command: {}", e);
+            Error::Failed(Box::new(e))
+        })?;
+
+        // clone the repo 
+        sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+            command: format!("git clone https://github.com/{}.git repo", _session_model.repo.unwrap()),
+            async_mode: false,
+            id: None,
+            timeout: Some(30.0 as f64),
+            exec_dir: Some(String::from("/home/gem")),
+        }).await.map_err(|e| {
+            error!("Failed to execute command: {}", e);
+            Error::Failed(Box::new(e))
+        })?;
+
+        // checkout the target branch
+        sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+            command: format!("git checkout {}", _session_model.target_branch.unwrap()),
+            async_mode: false,
+            id: None,
+            timeout: Some(30.0 as f64),
+            exec_dir: Some(String::from("/home/gem/repo")),
+        }).await.map_err(|e| {
+            error!("Failed to execute command: {}", e);
+            Error::Failed(Box::new(e))
+        })?;
 
 
-        // TODO: Create sandbox client using the api_url
-        // NOTE: The sandbox-client crate currently has build issues due to OpenAPI 3.1.0
-        // compatibility with progenitor 0.8.0. The openapi.json needs to be regenerated
-        // with OpenAPI 3.0.3 or progenitor needs to be upgraded to support 3.1.0
-        // let sandbox_client = sandbox_client::Client::new(api_url);
+        // if branch exists, checkout the branch, else switch -c the branch
+        sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+            command: format!("git checkout {} || git switch -c {}", _session_model.branch.unwrap(), _session_model.branch.unwrap()),
+            async_mode: false,
+            id: None,
+            timeout: Some(30.0 as f64),
+            exec_dir: Some(String::from("/home/gem/repo")),
+        }).await.map_err(|e| {
+            error!("Failed to execute command: {}", e);
+            Error::Failed(Box::new(e))
+        })?;
 
         // TODO: Store borrowed_ip in session_model.sbx_config
         // TODO: Use sandbox_client to interact with the sandbox
