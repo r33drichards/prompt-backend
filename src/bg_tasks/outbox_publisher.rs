@@ -87,7 +87,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
             command: format!(
                 "git clone https://github.com/{}.git repo",
-                _session_model.repo.unwrap()
+                _session_model.repo.clone().unwrap()
             ),
             async_mode: false,
             id: None,
@@ -102,7 +102,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
         // checkout the target branch
         sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-            command: format!("git checkout {}", _session_model.target_branch.unwrap()),
+            command: format!("git checkout {}", _session_model.target_branch.clone().unwrap()),
             async_mode: false,
             id: None,
             timeout: Some(30.0 as f64),
@@ -116,6 +116,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
         let branch = _session_model
             .branch
+            .clone()
             .unwrap_or_else(|| format!("claude/{}", _session_model.id));
         // if branch exists, checkout the branch, else switch -c the branch
         sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
@@ -136,6 +137,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         let mcp_json_string_owned = mcp_json_string.to_string();
         let borrowed_ip_item = borrowed_ip.item.clone();
         let ip_allocator_url_clone = ip_allocator_url.clone();
+        let session_model_clone = _session_model.clone();
+        let db_clone = ctx.db.clone();
 
         tokio::spawn(async move {
             // Run npx command in blocking thread pool
@@ -205,29 +208,36 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     if !stderr.is_empty() {
                         info!("Claude Code stderr for session {}: {}", session_id, stderr);
                     }
-                    let mut msgs = _session_model
+
+                    // Extract existing messages from the nested messages.messages field
+                    let mut msgs: Vec<serde_json::Value> = session_model_clone
                         .messages
-                        .clone()
-                        .unwrap_or_default()
-                        .into_iter()
-                        .collect::<Vec<serde_json::Value>>();
+                        .as_ref()
+                        .and_then(|v| v.get("messages"))
+                        .and_then(|v| v.as_array())
+                        .map(|arr| arr.clone())
+                        .unwrap_or_default();
 
                     // Log each line of stream-json output
                     for line in stdout.lines() {
                         info!("Claude Code output for session {}: {}", session_id, line);
 
                         let json = serde_json::from_str::<serde_json::Value>(line).unwrap();
-                        msgs.push(json.into());
-                        // Update session messages in database every time we get a new message
-                        let mut active_session: session::ActiveModel = _session_model.into();
-                        active_session.messages = Set(Some(msgs.into()));
-                        active_session.update(&ctx.db).await.map_err(|e| {
+                        msgs.push(json);
+
+                        // Update session messages in database, wrapping in messages.messages structure
+                        let mut active_session: session::ActiveModel = session_model_clone.clone().into();
+                        let messages_wrapper = serde_json::json!({
+                            "messages": msgs.clone()
+                        });
+                        active_session.messages = Set(Some(messages_wrapper));
+
+                        if let Err(e) = active_session.update(&db_clone).await {
                             error!(
                                 "Failed to update session {} messages in database: {}",
                                 session_id, e
                             );
-                            Error::Failed(Box::new(e))
-                        })?;
+                        }
                     }
                 }
                 Ok(Err(e)) => {
