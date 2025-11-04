@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - master
-  issue_comment:
-    types: [created]
   workflow_dispatch:
     inputs:
       version:
@@ -19,51 +17,13 @@ env:
 jobs:
   generate-and-publish:
     runs-on: ubuntu-latest
-    # Only run on PR comments with the trigger command, or on push to master, or manual trigger
-    if: |
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request &&
-       contains(github.event.comment.body, '/build-node-sdk')) ||
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       id-token: write  # Required for npm provenance
-      pull-requests: write  # Required to comment on PRs
 
     steps:
-      - name: React to comment with eyes
-        if: github.event_name == 'issue_comment'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.reactions.createForIssueComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: context.payload.comment.id,
-              content: 'eyes'
-            });
-
-      - name: Get PR details
-        if: github.event_name == 'issue_comment'
-        id: pr
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pr = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number
-            });
-            core.setOutput('ref', pr.data.head.ref);
-            core.setOutput('sha', pr.data.head.sha);
-            core.setOutput('number', context.issue.number);
-
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'issue_comment' && steps.pr.outputs.sha || github.sha }}
-          fetch-depth: 0
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
@@ -85,11 +45,6 @@ jobs:
 
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
-          elif [ "${{ github.event_name }}" == "issue_comment" ]; then
-            # For PR comments, use beta version with PR number and short SHA
-            PR_NUMBER="${{ steps.pr.outputs.number }}"
-            SHORT_SHA=$(echo "${{ steps.pr.outputs.sha }}" | cut -c1-7)
-            VERSION="${BASE_VERSION}-beta.pr${PR_NUMBER}.${SHORT_SHA}"
           else
             # For master branch, use the version from sdk/package.json
             VERSION="$BASE_VERSION"
@@ -97,10 +52,10 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📦 Package version: $VERSION"
 
-      - name: Update version for beta/custom builds
-        if: github.event_name == 'issue_comment' || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')
+      - name: Update version for custom builds
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
         run: |
-          # Temporarily update sdk/package.json with the beta/custom version
+          # Temporarily update sdk/package.json with the custom version
           jq '.version = "${{ steps.version.outputs.version }}"' sdk/package.json > sdk/package.json.tmp
           mv sdk/package.json.tmp sdk/package.json
           echo "Updated sdk/package.json to version ${{ steps.version.outputs.version }}"
@@ -118,14 +73,6 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish to npm (beta - PR comment)
-        if: github.event_name == 'issue_comment'
-        working-directory: generated-client
-        run: |
-          npm publish --access public --tag beta --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - name: Publish to npm (manual)
         if: github.event_name == 'workflow_dispatch'
         working-directory: generated-client
@@ -133,54 +80,6 @@ jobs:
           npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Comment on PR with package info
-        if: github.event_name == 'issue_comment'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const version = '${{ steps.version.outputs.version }}';
-            const packageName = '${{ env.PACKAGE_NAME }}';
-
-            const comment = `## 📦 TypeScript SDK Published
-
-            A beta version of the TypeScript SDK has been published for this PR!
-
-            **Package:** \`${packageName}\`
-            **Version:** \`${version}\`
-
-            ### Installation
-            \`\`\`bash
-            npm install ${packageName}@${version}
-            # or
-            yarn add ${packageName}@${version}
-            # or
-            pnpm add ${packageName}@${version}
-            \`\`\`
-
-            ### Usage
-            \`\`\`typescript
-            import { Configuration, DefaultApi } from '${packageName}';
-
-            const config = new Configuration({
-              basePath: 'http://localhost:8000'
-            });
-            const api = new DefaultApi(config);
-
-            // Use the API...
-            const sessions = await api.handlersSessionsList();
-            console.log(sessions);
-            \`\`\`
-
-            This beta package will be available on npm with the \`beta\` tag.
-            `;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
 
       - name: Upload generated client as artifact
         uses: actions/upload-artifact@v4
