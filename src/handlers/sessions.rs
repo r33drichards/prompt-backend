@@ -125,7 +125,7 @@ pub async fn create(
     let prompt = "todo";
 
     // Generate title using Anthropic Haiku
-    let title = anthropic::generate_session_title(&input.repo, &input.target_branch, &prompt)
+    let title = anthropic::generate_session_title(&input.repo, &input.target_branch, prompt)
         .await
         .unwrap_or_else(|e| {
             tracing::warn!("Failed to generate session title: {}", e);
@@ -136,7 +136,7 @@ pub async fn create(
     let generated_branch = anthropic::generate_branch_name(
         &input.repo,
         &input.target_branch,
-        &prompt,
+        prompt,
         &id.to_string(),
     )
     .await

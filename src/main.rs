@@ -70,12 +70,9 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     // Handle print-openapi command
-    match cli.command {
-        Some(Commands::PrintOpenapi) => {
-            println!("{}", generate_openapi_spec());
-            return Ok(());
-        }
-        _ => {}
+    if let Some(Commands::PrintOpenapi) = cli.command {
+        println!("{}", generate_openapi_spec());
+        return Ok(());
     }
 
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());

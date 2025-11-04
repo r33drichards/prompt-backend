@@ -12,7 +12,9 @@ use super::jwks::JwksCache;
 #[derive(Debug, Clone)]
 pub struct AuthenticatedUser {
     pub user_id: String,
+    #[allow(dead_code)]
     pub email: Option<String>,
+    #[allow(dead_code)]
     pub name: Option<String>,
 }
 
