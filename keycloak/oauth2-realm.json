@@ -175,7 +175,7 @@
       "enabled": true,
       "updateProfileFirstLoginMode": "on",
       "trustEmail": false,
-      "storeToken": false,
+      "storeToken": true,
       "addReadTokenRoleOnCreate": false,
       "authenticateByDefault": false,
       "linkOnly": false,
@@ -183,7 +183,7 @@
       "config": {
         "clientId": "",
         "clientSecret": "",
-        "defaultScope": "user:email",
+        "defaultScope": "repo,user:email",
         "syncMode": "IMPORT",
         "useJwksUrl": "true"
       }

@@ -5,6 +5,7 @@ use tracing::{error, info};
 
 use sandbox_client::types::ShellExecRequest;
 
+use crate::auth::KeycloakClient;
 use crate::entities::session::{self, Entity as Session, InboxStatus};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
@@ -70,8 +71,34 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         // Create sandbox client using the api_url
         let sbx = sandbox_client::Client::new(api_url);
 
+        // Fetch GitHub token from Keycloak using admin API
+        info!("Fetching GitHub token for user {}", _session_model.user_id);
+
+        let keycloak_client = KeycloakClient::new().map_err(|e| {
+            error!("Failed to create Keycloak client: {}", e);
+            Error::Failed(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Keycloak client error: {}", e),
+            )))
+        })?;
+
+        let github_token = keycloak_client
+            .get_github_token_for_user(&_session_model.user_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to get GitHub token for user {}: {}",
+                    _session_model.user_id, e);
+                Error::Failed(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    format!("Failed to get GitHub token: {}", e),
+                )))
+            })?;
+
+        // Authenticate with GitHub
+        info!("Authenticating with GitHub for session {}", _session_model.id);
+        let auth_command = format!("echo '{}' | gh auth login --with-token", github_token);
         sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-            command: "gh auth login --with-token TODO".to_string(),
+            command: auth_command,
             async_mode: false,
             id: None,
             timeout: Some(30.0_f64),
@@ -79,7 +106,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         })
         .await
         .map_err(|e| {
-            error!("Failed to execute command: {}", e);
+            error!("Failed to authenticate with GitHub: {}", e);
             Error::Failed(Box::new(e))
         })?;
 
