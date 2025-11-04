@@ -1,12 +1,14 @@
-# GitHub Token Integration via Keycloak
+# GitHub Token Integration via Keycloak Admin API
 
 ## Overview
 
-This document describes how GitHub access tokens are retrieved from Keycloak's identity provider and used in background jobs for Git operations.
+This document describes how GitHub access tokens are retrieved from Keycloak's identity provider **on-demand** using the Keycloak Admin API and used in background jobs for Git operations.
+
+**Key Design Decision:** GitHub tokens are **NOT stored in the application database**. They are retrieved on-demand from Keycloak when needed, ensuring better security and reducing attack surface.
 
 ## Architecture
 
-When users authenticate via GitHub through Keycloak, Keycloak stores the GitHub access token. This implementation retrieves and uses that token for automated Git operations in the outbox background job.
+When users authenticate via GitHub through Keycloak, Keycloak stores the GitHub access token. This implementation retrieves tokens on-demand from Keycloak using admin credentials when the background job runs.
 
 ```
 User Authentication Flow:
@@ -14,7 +16,7 @@ User Authentication Flow:
 │ Browser │─────>│ Keycloak │─────>│ GitHub │─────>│   App  │
 └─────────┘      └──────────┘      └────────┘      └────────┘
                       │
-                      ├─ Stores GitHub Token
+                      ├─ Stores GitHub Token (storeToken=true)
                       └─ Issues JWT with user_id
 ```
 
@@ -24,39 +26,64 @@ Session Creation Flow:
 │ Client  │──── JWT Token ────>│ Backend API    │
 └─────────┘                    └────────────────┘
                                        │
-                    ┌──────────────────┼──────────────────┐
-                    │                  │                  │
-                    ▼                  ▼                  ▼
-         ┌──────────────────┐  ┌─────────────┐   ┌──────────────┐
-         │ Validate JWT via │  │  Keycloak   │   │  PostgreSQL  │
-         │   JWKS (user_id) │  │  /broker/   │   │   Database   │
-         └──────────────────┘  │github/token │   └──────────────┘
-                               │  endpoint   │          │
-                               └─────────────┘          │
-                                       │                │
-                                       ▼                ▼
-                               ┌─────────────┐   ┌──────────────┐
-                               │GitHub Token │──>│Session Record│
-                               └─────────────┘   │ w/ gh_token  │
-                                                 └──────────────┘
+                                       ▼
+                               ┌─────────────┐
+                               │ Validate JWT│
+                               │ (get user_id)│
+                               └─────────────┘
+                                       │
+                                       ▼
+                               ┌──────────────┐
+                               │  PostgreSQL  │
+                               │Create Session│
+                               │(user_id only)│
+                               └──────────────┘
 ```
 
 ```
-Background Job Flow:
+Background Job Flow (On-Demand Token Retrieval):
 ┌──────────────────┐
 │ Outbox Publisher │
 │  (Background)    │
 └──────────────────┘
          │
-         ├─ Query Active Sessions
+         ├─ 1. Query Active Sessions
          ▼
   ┌─────────────┐
-  │ PostgreSQL  │──── Retrieves Session with github_token
+  │ PostgreSQL  │──── Retrieves Session with user_id
   └─────────────┘
          │
+         ├─ 2. Authenticate as Keycloak Admin
+         ▼
+  ┌──────────────────────┐
+  │ Keycloak Admin API   │
+  │ POST /realms/master/ │
+  │ protocol/openid-     │
+  │ connect/token        │
+  └──────────────────────┘
+         │
+         ├─ 3. Get User's Federated Identity
+         ▼
+  ┌────────────────────────────┐
+  │ Keycloak Admin API         │
+  │ GET /admin/realms/{realm}/ │
+  │ users/{userId}/            │
+  │ federated-identity         │
+  └────────────────────────────┘
+         │
+         ├─ 4. Retrieve GitHub Token
+         ▼
+  ┌────────────────────────────┐
+  │ Keycloak Admin API         │
+  │ GET /admin/realms/{realm}/ │
+  │ users/{userId}/federated-  │
+  │ identity/github/token      │
+  └────────────────────────────┘
+         │
+         ├─ 5. Use Token for Git Operations
          ▼
   ┌─────────────────┐
-  │ Sandbox (gh CLI)│──── Uses token for: gh auth, git clone, push, etc.
+  │ Sandbox (gh CLI)│──── gh auth, git clone, push, etc.
   └─────────────────┘
 ```
 
@@ -80,69 +107,69 @@ The GitHub identity provider is configured with:
 }
 ```
 
-### 2. Keycloak Client Module
+### 2. Keycloak Admin API Client Module
 
 **File:** `src/auth/keycloak_client.rs`
 
-A dedicated client for retrieving GitHub tokens from Keycloak's broker token endpoint.
+A dedicated client for retrieving GitHub tokens from Keycloak using Admin API.
 
 **Key Methods:**
-- `get_github_token(&self, user_access_token: &str) -> Result<String>`
-  - Uses Keycloak's broker token endpoint: `/realms/{realm}/broker/github/token`
-  - Requires the user's Keycloak JWT token for authorization
-  - Returns the GitHub access token stored by Keycloak
+- `get_admin_token(&self) -> Result<String>`
+  - Authenticates with Keycloak using admin credentials
+  - Uses `admin-cli` client with password grant
 
-**Endpoint Used:**
+- `get_federated_identities(&self, admin_token, user_id) -> Result<Vec<FederatedIdentity>>`
+  - Retrieves list of external identity providers linked to user
+
+- `get_github_token_for_user(&self, user_id: &str) -> Result<String>`
+  - Main method used by background jobs
+  - Combines the above methods to retrieve GitHub token on-demand
+
+**Endpoints Used:**
 ```
-GET /realms/oauth2-realm/broker/github/token
-Authorization: Bearer <keycloak-jwt-token>
+# 1. Authenticate as admin
+POST /realms/master/protocol/openid-connect/token
+Body: grant_type=password&client_id=admin-cli&username=admin&password=***
+
+# 2. Get federated identities
+GET /admin/realms/{realm}/users/{user_id}/federated-identity
+Authorization: Bearer <admin-token>
+
+# 3. Get GitHub token
+GET /admin/realms/{realm}/users/{user_id}/federated-identity/github/token
+Authorization: Bearer <admin-token>
 ```
 
 ### 3. Database Schema
 
-**Migration:** `migration/src/m20251104_000001_add_github_token_to_sessions.rs`
+**No Changes** - The session table does **NOT** store GitHub tokens.
 
-Added `github_token` field to the `session` table:
-
-```sql
-ALTER TABLE session ADD COLUMN github_token VARCHAR NULL;
-```
-
-**Entity Model:** `src/entities/session.rs`
-
-```rust
-pub struct Model {
-    // ... other fields
-    pub github_token: Option<String>,
-}
-```
+Sessions only store:
+- `user_id` (Keycloak subject) - Used to fetch token on-demand
+- Other session metadata (repo, branch, etc.)
 
 ### 4. Session Creation Handler
 
 **File:** `src/handlers/sessions.rs`
 
-When a session is created:
-1. The `AuthenticatedUserWithToken` guard extracts both user info and the raw JWT
-2. A `KeycloakClient` is instantiated
-3. The GitHub token is fetched using `get_github_token(&jwt_token)`
-4. The token is stored in the session record
+Session creation is simple:
+1. Validate user's JWT
+2. Extract `user_id` from JWT claims
+3. Create session with `user_id`
+4. **No token fetching during session creation**
 
-**Code Flow:**
 ```rust
-// 1. Extract user and JWT token
-user_with_token: AuthenticatedUserWithToken
-
-// 2. Fetch GitHub token from Keycloak
-let keycloak_client = KeycloakClient::new()?;
-let github_token = keycloak_client
-    .get_github_token(&user_with_token.token)
-    .await?;
-
-// 3. Store in session
-let new_session = session::ActiveModel {
-    github_token: Set(Some(github_token)),
-    // ...
-};
+pub async fn create(
+    user: AuthenticatedUser,  // Contains user_id from JWT
+    db: &State<DatabaseConnection>,
+    input: Json<CreateSessionInput>,
+) -> OResult<CreateSessionOutput> {
+    // Create session with user_id
+    let new_session = session::ActiveModel {
+        user_id: Set(user.user_id.clone()),
+        // ... other fields, NO github_token field
+    };
+}
 ```
 
 ### 5. Outbox Background Job
@@ -151,27 +178,31 @@ let new_session = session::ActiveModel {
 
 The background job:
 1. Queries active sessions from PostgreSQL
-2. Retrieves the stored `github_token` from the session
+2. **On-demand**: Creates KeycloakClient and fetches GitHub token using `user_id`
 3. Uses the token to authenticate `gh` CLI in the sandbox
 4. Performs Git operations (clone, checkout, commit, push)
 
 **Code Flow:**
 ```rust
-// 1. Get session with GitHub token
+// 1. Get session (contains user_id)
 let session = Session::find()
     .filter(session::Column::InboxStatus.eq(InboxStatus::Active))
     .one(&db)
     .await?;
 
-// 2. Authenticate with GitHub
-if let Some(ref github_token) = session.github_token {
-    let auth_command = format!("echo '{}' | gh auth login --with-token", github_token);
-    sbx.exec_command(&auth_command).await?;
+// 2. Fetch GitHub token on-demand from Keycloak
+let keycloak_client = KeycloakClient::new()?;
+let github_token = keycloak_client
+    .get_github_token_for_user(&session.user_id)
+    .await?;
 
-    // 3. Perform Git operations
-    sbx.exec_command("git clone https://github.com/{repo}.git").await?;
-    // ...
-}
+// 3. Authenticate with GitHub
+let auth_command = format!("echo '{}' | gh auth login --with-token", github_token);
+sbx.exec_command(&auth_command).await?;
+
+// 4. Perform Git operations
+sbx.exec_command("git clone https://github.com/{repo}.git").await?;
+// ...
 ```
 
 ## Authentication Flow Details
@@ -185,6 +216,7 @@ if let Some(ref github_token) = session.github_token {
 1. **Initial Setup (One-time, by admin):**
    - Register OAuth App in GitHub (already done via `keycloak/configure-github.sh`)
    - Configure OAuth App credentials in Keycloak realm
+   - **Configure Keycloak admin credentials** in environment variables
 
 2. **User Authentication (Each user, once):**
    - User logs into your app
@@ -193,14 +225,15 @@ if let Some(ref github_token) = session.github_token {
    - Keycloak receives and **stores** the GitHub access token
    - User is redirected back to your app
 
-3. **Token Retrieval (Automatic, per session):**
-   - When user creates a session, backend has their Keycloak JWT
-   - Backend calls Keycloak's broker token endpoint
-   - Keycloak returns the stored GitHub token
-   - Token is saved in session for background job use
+3. **Session Creation (Per session):**
+   - User creates a session via API
+   - Backend validates JWT, extracts `user_id`
+   - Session created with `user_id` (no token stored)
 
-4. **Background Job (Automatic, no user interaction):**
-   - Job reads GitHub token from session
+4. **Background Job (Automatic, on-demand token retrieval):**
+   - Job reads `user_id` from session
+   - Job authenticates with Keycloak as admin
+   - Job retrieves user's GitHub token from Keycloak
    - Authenticates `gh` CLI with the token
    - Performs Git operations on behalf of the user
 
@@ -208,28 +241,42 @@ if let Some(ref github_token) = session.github_token {
 
 ✅ **No GitHub App installation required** - Uses standard OAuth App
 ✅ **No user intervention needed** - Token retrieved automatically
-✅ **Secure** - Token stored in Keycloak, not in application code
-✅ **Works in background jobs** - Token available for async operations
+✅ **Better security** - Tokens NOT stored in application database
+✅ **Reduced attack surface** - Only Keycloak stores tokens
+✅ **Works in background jobs** - Token retrieved on-demand when needed
 ✅ **Per-user tokens** - Each user's token is their own, with their permissions
+✅ **No token synchronization issues** - Always fetches fresh token from Keycloak
 
 ## Security Considerations
 
 1. **Token Storage:**
-   - GitHub tokens are stored in PostgreSQL session table
-   - Consider encrypting tokens at rest for production
-   - Tokens are nullable - sessions can exist without GitHub tokens
+   - GitHub tokens are **NOT** stored in application database
+   - Tokens remain in Keycloak (designed for secure token storage)
+   - Tokens retrieved on-demand and exist in memory only during job execution
 
-2. **Token Lifetime:**
+2. **Admin Credentials:**
+   - **CRITICAL:** Keycloak admin credentials must be secured
+   - Store in environment variables, never in code
+   - Use strong passwords or service accounts
+   - Consider using client credentials grant instead of password grant
+
+3. **Admin API Access:**
+   - Admin credentials grant broad access to Keycloak
+   - Ensure Keycloak is not publicly accessible
+   - Use network firewalls to restrict Keycloak access
+   - Monitor admin API usage
+
+4. **Token Lifetime:**
    - GitHub OAuth tokens typically don't expire
    - Consider implementing token refresh if using fine-grained tokens
    - Monitor for revoked tokens and handle errors gracefully
 
-3. **Error Handling:**
-   - If token fetch fails during session creation, session is still created (token is optional)
-   - If token is missing in background job, job fails with clear error message
+5. **Error Handling:**
+   - If token fetch fails, background job fails with clear error message
    - Logs contain warnings for debugging token issues
+   - User is not notified automatically (admin should monitor logs)
 
-4. **Permissions:**
+6. **Permissions:**
    - GitHub token has scopes: `repo, user:email`
    - Token inherits user's GitHub permissions
    - Ensure users understand what permissions they're granting
@@ -237,13 +284,21 @@ if let Some(ref github_token) = session.github_token {
 ## Environment Variables
 
 **Required:**
+
 ```bash
-# Keycloak Configuration
+# Keycloak Configuration (existing)
 KEYCLOAK_ISSUER=https://keycloak-production-1100.up.railway.app/realms/oauth2-realm
 KEYCLOAK_JWKS_URI=https://keycloak-production-1100.up.railway.app/realms/oauth2-realm/protocol/openid-connect/certs
+
+# Keycloak Admin Credentials (NEW - REQUIRED)
+KEYCLOAK_ADMIN_USERNAME=admin
+KEYCLOAK_ADMIN_PASSWORD=<your-secure-admin-password>
 ```
 
-**Note:** No additional environment variables needed for GitHub token retrieval!
+**Important:**
+- Use the Keycloak master realm admin credentials
+- For production, use a dedicated service account with minimal permissions
+- Never commit these credentials to version control
 
 ## Testing
 
@@ -259,7 +314,24 @@ cat keycloak/oauth2-realm.json | jq '.identityProviders[] | select(.alias=="gith
 # Should output: "repo,user:email"
 ```
 
-### 2. Test Session Creation
+### 2. Test Admin API Access
+
+```bash
+# Get admin token
+ADMIN_TOKEN=$(curl -X POST "https://your-keycloak.com/realms/master/protocol/openid-connect/token" \
+  -d "grant_type=password" \
+  -d "client_id=admin-cli" \
+  -d "username=admin" \
+  -d "password=yourpassword" | jq -r '.access_token')
+
+# Get user's federated identities
+curl "https://your-keycloak.com/admin/realms/oauth2-realm/users/{user-id}/federated-identity" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# Should return: [{"identityProvider":"github","userId":"...","userName":"..."}]
+```
+
+### 3. Test Session Creation
 
 ```bash
 # Create a session (requires authenticated user)
@@ -272,17 +344,7 @@ curl -X POST https://your-backend.com/sessions \
   }'
 ```
 
-**Expected:** Session created with `github_token` populated in database.
-
-### 3. Verify Token in Database
-
-```sql
--- Check that session has GitHub token
-SELECT id, user_id,
-       CASE WHEN github_token IS NOT NULL THEN 'Token present' ELSE 'No token' END as token_status
-FROM session
-WHERE inbox_status = 'active';
-```
+**Expected:** Session created with `user_id` in database (no token stored).
 
 ### 4. Test Background Job
 
@@ -291,137 +353,182 @@ WHERE inbox_status = 'active';
 cargo run -- --bg-tasks outbox-publisher
 
 # Check logs for:
-# - "Successfully fetched GitHub token for user <user_id>"
+# - "Fetching GitHub token for user <user_id> from Keycloak"
+# - "Authenticating as Keycloak admin"
+# - "Fetching federated identities for user <user_id>"
+# - "Successfully retrieved github token for user <user_id>"
 # - "Authenticating with GitHub for session <session_id>"
 ```
 
 ## Troubleshooting
 
-### Token Not Retrieved
+### Admin Authentication Failed
 
-**Symptom:** Session created without `github_token`
+**Symptom:** `Error: Admin authentication failed`
 
 **Possible Causes:**
-1. User not authenticated via GitHub IdP
-2. Keycloak `storeToken` is `false`
-3. User hasn't linked GitHub account in Keycloak
+1. Invalid admin username/password
+2. Admin credentials not for master realm
+3. `admin-cli` client disabled
 
 **Solution:**
-- Ensure user logs in via GitHub (not local Keycloak credentials)
-- Check Keycloak IdP configuration
-- View user in Keycloak admin → Identity Provider Links
+- Verify `KEYCLOAK_ADMIN_USERNAME` and `KEYCLOAK_ADMIN_PASSWORD`
+- Ensure using master realm admin credentials
+- Check Keycloak logs for authentication errors
+
+### User Not Linked to GitHub
+
+**Symptom:** `Error: User not found or not linked to GitHub`
+
+**Possible Causes:**
+1. User authenticated with local Keycloak credentials (not GitHub)
+2. User hasn't linked GitHub account
+3. GitHub link was removed
+
+**Solution:**
+- Ensure user logs in via GitHub IdP button
+- Check user in Keycloak admin → Identity Provider Links
+- User may need to re-authenticate via GitHub
+
+### Token Endpoint Returns Error
+
+**Symptom:** `Failed to retrieve IdP token: status=404` or `status=500`
+
+**Possible Causes:**
+1. Keycloak `storeToken` is `false`
+2. Token wasn't stored during authentication
+3. API endpoint not available in Keycloak version
+
+**Solution:**
+- Verify `storeToken: true` in realm configuration
+- Restart Keycloak after configuration change
+- Ensure Keycloak version >= 12 (supports token retrieval)
+- Check Keycloak server logs
 
 ### Background Job Fails
 
-**Symptom:** `Error: No GitHub token available for session`
+**Symptom:** `Error: Failed to get GitHub token`
 
 **Possible Causes:**
-1. Session created before token integration
-2. User authenticated via non-GitHub method
-3. Token was not fetched during session creation
+1. User not authenticated via GitHub
+2. Admin credentials invalid
+3. Network issues connecting to Keycloak
 
 **Solution:**
-- Check session `github_token` field in database
-- Recreate session after user re-authenticates via GitHub
-- Check application logs for token fetch errors
+- Check background job logs for specific error
+- Verify admin credentials
+- Test admin API access manually
+- Ensure background job can reach Keycloak (network/firewall)
 
-### Keycloak Broker Endpoint Returns 404
+## Comparison: Database Storage vs On-Demand Retrieval
 
-**Symptom:** `Failed to retrieve IdP token: status=404`
-
-**Possible Causes:**
-1. User not linked to GitHub identity provider
-2. Invalid identity provider alias
-3. Token not stored (storeToken=false)
-
-**Solution:**
-- Verify user has linked GitHub account in Keycloak
-- Check identity provider alias is "github"
-- Ensure `storeToken: true` in realm configuration
+| Aspect | Database Storage (Previous) | On-Demand Retrieval (Current) |
+|--------|----------------------------|------------------------------|
+| **Security** | ❌ Tokens in app database | ✅ Tokens only in Keycloak |
+| **Attack Surface** | ❌ Larger | ✅ Smaller |
+| **Token Sync** | ❌ Can become stale | ✅ Always fresh from source |
+| **Database Size** | ❌ Larger (stores tokens) | ✅ Smaller |
+| **Performance** | ✅ Faster (cached) | ⚠️ Slower (API calls) |
+| **Complexity** | ✅ Simpler | ⚠️ Requires admin setup |
+| **Best Practice** | ❌ Not recommended | ✅ Recommended |
 
 ## Migration Guide
 
-### Updating Existing Database
+### If You Had Database Storage Before
 
-1. **Run Migration:**
-   ```bash
-   cargo run -- migrate
-   ```
+**This implementation does NOT store tokens in database, so:**
 
-2. **Existing Sessions:**
-   - Old sessions will have `github_token = NULL`
-   - Background jobs will fail for these sessions
-   - Users must create new sessions after update
-
-3. **User Re-authentication:**
-   - Users don't need to re-authenticate if already logged in
-   - New sessions will automatically fetch token
-   - Token is fetched per-session, not per-login
+1. **No database migration needed** - No `github_token` column added
+2. **No token cleanup needed** - No tokens to remove
+3. **Session table unchanged** - Only `user_id` stored
 
 ### Deployment Steps
 
-1. Update Keycloak realm configuration:
+1. **Configure Keycloak admin credentials:**
    ```bash
-   # In keycloak directory
+   # Add to environment variables
+   export KEYCLOAK_ADMIN_USERNAME=admin
+   export KEYCLOAK_ADMIN_PASSWORD=<secure-password>
+   ```
+
+2. **Update Keycloak realm configuration:**
+   ```bash
+   cd keycloak
    ./configure-github.sh <client-id> <client-secret>
    docker compose restart keycloak
    ```
 
-2. Deploy backend with new code:
+3. **Deploy backend with new code:**
    ```bash
    cargo build --release
    docker compose up -d backend
    ```
 
-3. Run database migrations:
-   ```bash
-   cargo run -- migrate
-   ```
-
-4. Monitor logs for successful token retrieval
+4. **Test token retrieval:**
+   - Create a session as a GitHub-authenticated user
+   - Trigger background job
+   - Monitor logs for successful token retrieval
 
 ## API Changes
 
-### Session Creation Response
+**No API changes** - This is an internal implementation detail.
 
-**No changes** - Response format remains the same. GitHub token is not exposed in API responses for security.
+- Session creation endpoint unchanged
+- Session response format unchanged
+- No new endpoints added
 
-### Internal Changes Only
+## Performance Considerations
 
-All changes are internal:
-- Database schema (added field)
-- Session entity model (added field)
-- Request guard (added `AuthenticatedUserWithToken`)
-- Keycloak client (new module)
+### On-Demand Retrieval Overhead
 
-**No breaking changes to external API!**
+Each background job execution makes 2-3 additional API calls to Keycloak:
+1. Admin authentication (~100-200ms)
+2. Get federated identities (~50-100ms)
+3. Get token (~50-100ms)
+
+**Total overhead:** ~200-400ms per job
+
+**Optimization strategies:**
+1. Cache admin token (valid for 60 seconds by default)
+2. Batch process multiple sessions with same user
+3. Use connection pooling for Keycloak requests
+
+### When to Consider Database Storage
+
+**Only if:**
+- Background jobs run very frequently (>100/second)
+- Keycloak is geographically distant (>500ms latency)
+- You can implement proper token encryption at rest
+
+**For most use cases, on-demand retrieval is preferred for security.**
 
 ## Future Enhancements
 
-1. **Token Refresh:**
+1. **Admin Token Caching:**
+   - Cache admin token in memory (expires after 60s)
+   - Reduces API calls to Keycloak
+
+2. **Service Account Instead of Admin:**
+   - Create dedicated service account in Keycloak
+   - Grant minimal permissions (only user read + token access)
+   - More secure than using full admin account
+
+3. **Token Refresh:**
    - Implement token refresh for fine-grained tokens
    - Handle expired tokens gracefully
 
-2. **Token Encryption:**
-   - Encrypt `github_token` field at rest
-   - Use application-level encryption before database storage
-
-3. **Multiple IdP Support:**
+4. **Multiple IdP Support:**
    - Support GitLab, Bitbucket, etc.
    - Add `git_provider` field to sessions
 
-4. **Token Revocation Detection:**
+5. **Token Revocation Detection:**
    - Detect when user revokes OAuth app access
    - Notify user or mark session as invalid
-
-5. **Admin Endpoints:**
-   - Endpoint to refresh GitHub token for a session
-   - Endpoint to check token validity
 
 ## References
 
 - [Keycloak Identity Brokering](https://www.keycloak.org/docs/latest/server_admin/#_identity_broker)
-- [Keycloak Broker Token Endpoint](https://www.keycloak.org/docs/latest/server_admin/#_identity_broker_tokens)
+- [Keycloak Admin REST API](https://www.keycloak.org/docs-api/latest/rest-api/)
 - [GitHub OAuth Apps](https://docs.github.com/en/developers/apps/building-oauth-apps)
 - [GitHub CLI Authentication](https://cli.github.com/manual/gh_auth_login)
 
@@ -429,6 +536,6 @@ All changes are internal:
 
 For issues or questions:
 1. Check application logs (`tracing::info`, `tracing::error`)
-2. Verify Keycloak configuration
-3. Test token retrieval manually via Keycloak API
+2. Test admin API access manually
+3. Verify Keycloak configuration
 4. Review this documentation's Troubleshooting section
