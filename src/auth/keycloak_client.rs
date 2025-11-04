@@ -52,21 +52,13 @@ pub struct KeycloakClient {
 impl KeycloakClient {
     /// Create a new Keycloak client
     pub fn new() -> Result<Self, KeycloakError> {
-        let keycloak_issuer = env::var("KEYCLOAK_ISSUER").map_err(|_| {
-            KeycloakError::InvalidConfig("KEYCLOAK_ISSUER not set".to_string())
+        let keycloak_base_url = env::var("KEYCLOAK_URL").map_err(|_| {
+            KeycloakError::InvalidConfig("KEYCLOAK_URL not set".to_string())
         })?;
 
-        // Extract base URL and realm from issuer
-        // Expected format: https://keycloak.example.com/realms/realm-name
-        let parts: Vec<&str> = keycloak_issuer.rsplitn(2, "/realms/").collect();
-        if parts.len() != 2 {
-            return Err(KeycloakError::InvalidConfig(
-                "Invalid KEYCLOAK_ISSUER format".to_string(),
-            ));
-        }
-
-        let realm = parts[0].to_string();
-        let keycloak_base_url = parts[1].to_string();
+        let realm = env::var("KEYCLOAK_REALM").map_err(|_| {
+            KeycloakError::InvalidConfig("KEYCLOAK_REALM not set".to_string())
+        })?;
 
         // Get admin credentials from environment
         let admin_username = env::var("KEYCLOAK_ADMIN_USERNAME").map_err(|_| {
