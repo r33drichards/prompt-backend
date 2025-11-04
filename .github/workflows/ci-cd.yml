@@ -106,7 +106,7 @@ jobs:
           echo "   - ${{ env.IMAGE_NAME }}:latest"
 
   deploy-railway:
-    needs: [build, test]
+    needs: [deploy]
     runs-on: ubuntu-latest
     container: ghcr.io/railwayapp/cli:latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
