@@ -56,6 +56,7 @@ fn generate_openapi_spec() -> String {
         handlers::sessions::list,
         handlers::sessions::update,
         handlers::sessions::delete,
+        handlers::github::search_repositories,
     ](&settings);
     serde_json::to_string_pretty(&spec).unwrap()
 }
@@ -206,6 +207,7 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
                 handlers::sessions::list,
                 handlers::sessions::update,
                 handlers::sessions::delete,
+                handlers::github::search_repositories,
             ],
         )
         .mount(
