@@ -42,5 +42,9 @@ version = "=0.5.9"
 [dependencies.regex]
 version = "=1.10.6"
 
+# Pin regress to avoid edition 2024 requirement (not yet stable in Rust 1.84)
+[dependencies.regress]
+version = "=0.10.1"
+
 [dev-dependencies]
 insta = { version = "1.34", features = ["json"] }
