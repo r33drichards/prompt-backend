@@ -179,8 +179,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             let temp_dir = std::env::temp_dir().join(format!("claude-session-{}", session_id));
             if let Err(e) = std::fs::create_dir_all(&temp_dir) {
                 error!("Failed to create temp directory for session {}: {}", session_id, e);
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(std::io::Error::other(
                     format!("Failed to create temp directory: {}", e)
                 ));
             }
