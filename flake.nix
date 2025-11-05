@@ -18,6 +18,12 @@
           inherit system overlays;
         };
 
+        # For Docker images, always use Linux packages
+        linuxPkgs = import nixpkgs {
+          system = "x86_64-linux";
+          overlays = overlays;
+        };
+
         # Use the specific Rust toolchain required by Rocket
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" "rust-analyzer" ];
@@ -49,6 +55,33 @@
           buildInputs = buildInputs;
 
           meta = with pkgs.lib; {
+            description = "A Rust webserver with Redis CRUD operations";
+            license = licenses.mit;
+          };
+        };
+
+        # Linux-specific Rust package for Docker images
+        linuxRustPackage = linuxPkgs.rustPlatform.buildRustPackage {
+          pname = "rust-redis-webserver";
+          version = "0.1.0";
+
+          src = ./.;
+
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+          };
+
+          nativeBuildInputs = with linuxPkgs; [
+            linuxPkgs.rust-bin.stable.latest.default
+            pkg-config
+          ];
+
+          buildInputs = with linuxPkgs; [
+            openssl
+            redis
+          ];
+
+          meta = with linuxPkgs.lib; {
             description = "A Rust webserver with Redis CRUD operations";
             license = licenses.mit;
           };
@@ -185,39 +218,41 @@
         };
 
         # Docker image (builds compressed tarball)
-        packages.docker = pkgs.dockerTools.buildLayeredImage {
+        # Always builds for x86_64-linux regardless of host system
+        packages.docker = linuxPkgs.dockerTools.buildLayeredImage {
           name = "rust-redis-webserver";
           tag = "latest";
           contents = [
-            self.packages.${system}.default
-            pkgs.cacert
+            linuxRustPackage
+            linuxPkgs.cacert
           ];
           config = {
-            Cmd = [ "${self.packages.${system}.default}/bin/rust-redis-webserver" ];
+            Cmd = [ "${linuxRustPackage}/bin/rust-redis-webserver" ];
             ExposedPorts = {
               "8000/tcp" = {};
             };
             Env = [
-              "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              "SSL_CERT_FILE=${linuxPkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
             ];
           };
         };
 
         # Docker image streamer (for CI and direct loading)
-        packages.dockerStream = pkgs.dockerTools.streamLayeredImage {
+        # Always builds for x86_64-linux regardless of host system
+        packages.dockerStream = linuxPkgs.dockerTools.streamLayeredImage {
           name = "rust-redis-webserver";
           tag = "latest";
           contents = [
-            self.packages.${system}.default
-            pkgs.cacert
+            linuxRustPackage
+            linuxPkgs.cacert
           ];
           config = {
-            Cmd = [ "${self.packages.${system}.default}/bin/rust-redis-webserver" ];
+            Cmd = [ "${linuxRustPackage}/bin/rust-redis-webserver" ];
             ExposedPorts = {
               "8000/tcp" = {};
             };
             Env = [
-              "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              "SSL_CERT_FILE=${linuxPkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
             ];
           };
         };
@@ -233,7 +268,7 @@
           type = "app";
           program = toString (pkgs.writeShellScript "load-docker-image" ''
             set -e
-            echo "🐳 Streaming Docker image into Docker daemon..."
+            echo "🐳 Streaming Docker image (x86_64-linux) into Docker daemon..."
             ${self.packages.${system}.dockerStream} | ${pkgs.docker}/bin/docker image load
             echo "✅ Image loaded successfully!"
             echo ""

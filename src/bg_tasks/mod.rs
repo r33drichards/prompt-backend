@@ -100,15 +100,21 @@ impl TaskContext {
                 let storage = PostgresStorage::new(pool.clone());
 
                 // Create listener for PostgreSQL notifications
-                let mut listener = PgListen::new(pool).await?;
+                let mut listener = PgListen::new(pool.clone()).await?;
                 listener.subscribe::<outbox_publisher::OutboxJob>();
 
                 tokio::spawn(async move {
                     listener.listen().await.unwrap();
                 });
 
+                // Create OutboxContext with database connection
+                let database_url = std::env::var("DATABASE_URL")
+                    .map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
+                let db = crate::db::establish_connection(&database_url).await?;
+                let ctx = outbox_publisher::OutboxContext { db };
+
                 let worker = WorkerBuilder::new(OUTBOX_PUBLISHER)
-                    .data(())
+                    .data(ctx)
                     .with_storage(storage)
                     .build_fn(outbox_publisher::process_outbox_job);
 

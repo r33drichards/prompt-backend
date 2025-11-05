@@ -83,7 +83,7 @@ services:
 
   webserver:
     image: rust-redis-webserver:latest
-    command: ["rust-redis-webserver", "--server"]
+    command: ["rust-redis-webserver", "--server", "--bg-tasks=-A"]
     ports:
       - "8000:8000"
     depends_on:
@@ -98,6 +98,11 @@ services:
       - DATABASE_URL=postgres://promptuser:promptpass@postgres/prompt_backend
       - KEYCLOAK_ISSUER=http://localhost:8080/realms/oauth2-realm
       - KEYCLOAK_JWKS_URI=http://keycloak:8080/realms/oauth2-realm/protocol/openid-connect/certs
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=oauth2-realm
+      - KEYCLOAK_ADMIN_USERNAME=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - IP_ALLOCATOR_URL=http://localhost:8000
 
 volumes:
   postgres_data:

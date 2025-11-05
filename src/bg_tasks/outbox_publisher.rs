@@ -6,7 +6,7 @@ use tracing::{error, info};
 use sandbox_client::types::ShellExecRequest;
 
 use crate::auth::KeycloakClient;
-use crate::entities::session::{self, Entity as Session, InboxStatus};
+use crate::entities::session::{self, Entity as Session};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,10 +48,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             Error::Failed("Session not found".into())
         })?;
 
-
     info!("Processing active session {}", session_id);
-
-
 
     // get sbx config from ip-allocator
     // Read IP_ALLOCATOR_URL from environment, e.g., "http://localhost:8000"
