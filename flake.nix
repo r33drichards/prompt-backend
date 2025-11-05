@@ -16,12 +16,14 @@
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs {
           inherit system overlays;
+          config.allowUnfree = true;
         };
 
         # For Docker images, always use Linux packages
         linuxPkgs = import nixpkgs {
           system = "x86_64-linux";
           overlays = overlays;
+          config.allowUnfree = true;
         };
 
         # Use the specific Rust toolchain required by Rocket
