@@ -236,6 +236,7 @@
             };
             Env = [
               "SSL_CERT_FILE=${linuxPkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              "HOME=/tmp"
             ];
           };
         };
@@ -253,6 +254,7 @@
             };
             Env = [
               "SSL_CERT_FILE=${linuxPkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              "HOME=/tmp"
             ];
           };
         };
