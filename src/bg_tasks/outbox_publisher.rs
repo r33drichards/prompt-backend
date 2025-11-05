@@ -240,13 +240,36 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         match result {
             Ok(Ok(output)) => {
                 info!("Claude Code CLI completed for session {}", session_id);
+                info!("Claude Code CLI exit status: {:?}", output.status);
 
                 // Parse stream-json output
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
 
+                // Log stderr line by line to avoid truncation
                 if !stderr.is_empty() {
-                    info!("Claude Code stderr for session {}: {}", session_id, stderr);
+                    error!("Claude Code stderr for session {} (start)", session_id);
+                    for (i, line) in stderr.lines().enumerate() {
+                        error!("Claude Code stderr[{}] for session {}: {}", i, session_id, line);
+                    }
+                    error!("Claude Code stderr for session {} (end)", session_id);
+                }
+
+                // Check if the command failed
+                if !output.status.success() {
+                    error!(
+                        "Claude Code CLI failed with exit status: {:?} for session {}",
+                        output.status, session_id
+                    );
+
+                    // Log first 20 lines of stdout for debugging
+                    info!("Claude Code stdout (first 20 lines) for session {}:", session_id);
+                    for (i, line) in stdout.lines().take(20).enumerate() {
+                        info!("stdout[{}]: {}", i, line);
+                    }
+
+                    // Don't process the output further if command failed
+                    return;
                 }
 
                 // Extract existing messages from the nested messages.messages field
@@ -259,27 +282,47 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     .unwrap_or_default();
 
                 // Log each line of stream-json output
+                let mut line_count = 0;
                 for line in stdout.lines() {
-                    info!("Claude Code output for session {}: {}", session_id, line);
+                    line_count += 1;
 
-                    let json = serde_json::from_str::<serde_json::Value>(line).unwrap();
-                    msgs.push(json);
+                    // Skip empty lines
+                    if line.trim().is_empty() {
+                        continue;
+                    }
 
-                    // Update session messages in database, wrapping in messages.messages structure
-                    let mut active_session: session::ActiveModel =
-                        session_model_clone.clone().into();
-                    let messages_wrapper = serde_json::json!({
-                        "messages": msgs.clone()
-                    });
-                    active_session.messages = Set(Some(messages_wrapper));
+                    info!("Claude Code output line {} for session {}: {}", line_count, session_id, line);
 
-                    if let Err(e) = active_session.update(&db_clone).await {
-                        error!(
-                            "Failed to update session {} messages in database: {}",
-                            session_id, e
-                        );
+                    // Parse JSON with error handling
+                    match serde_json::from_str::<serde_json::Value>(line) {
+                        Ok(json) => {
+                            msgs.push(json);
+
+                            // Update session messages in database, wrapping in messages.messages structure
+                            let mut active_session: session::ActiveModel =
+                                session_model_clone.clone().into();
+                            let messages_wrapper = serde_json::json!({
+                                "messages": msgs.clone()
+                            });
+                            active_session.messages = Set(Some(messages_wrapper));
+
+                            if let Err(e) = active_session.update(&db_clone).await {
+                                error!(
+                                    "Failed to update session {} messages in database: {}",
+                                    session_id, e
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to parse JSON at line {} for session {}: {}. Line content: {}",
+                                line_count, session_id, e, line
+                            );
+                        }
                     }
                 }
+
+                info!("Processed {} lines of output for session {}", line_count, session_id);
             }
             Ok(Err(e)) => {
                 error!(
