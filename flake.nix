@@ -89,38 +89,13 @@
           };
         };
 
-        # Create non-root user for container
-        passwdFile = linuxPkgs.writeTextFile {
-          name = "passwd";
-          text = ''
-            root:x:0:0:root:/root:/bin/sh
-            appuser:x:1000:1000:Application User:/home/appuser:/bin/sh
-          '';
-          destination = "/etc/passwd";
-        };
-
-        groupFile = linuxPkgs.writeTextFile {
-          name = "group";
-          text = ''
-            root:x:0:
-            appuser:x:1000:
-          '';
-          destination = "/etc/group";
-        };
-
-        # Create home directory structure
-        homeDir = linuxPkgs.runCommand "home-appuser" {} ''
-          mkdir -p $out/home/appuser
-          chmod 755 $out/home/appuser
-        '';
-
+        # Docker image contents
         dockerContents = [
           linuxRustPackage
           linuxPkgs.cacert
           linuxPkgs.claude-code
-          passwdFile
-          groupFile
-          homeDir
+          linuxPkgs.shadow  # Provides useradd, groupadd, etc.
+          linuxPkgs.bashInteractive
         ];
 
         # Script to generate TypeScript API client
@@ -259,6 +234,16 @@
           name = "rust-redis-webserver";
           tag = "latest";
           contents = dockerContents;
+
+          # Set up user and group files, create home directory
+          fakeRootCommands = ''
+            ${linuxPkgs.dockerTools.shadowSetup}
+            groupadd -g 1000 appuser
+            useradd -u 1000 -g 1000 -m -d /home/appuser -s /bin/bash appuser
+            mkdir -p /home/appuser
+            chown -R appuser:appuser /home/appuser
+          '';
+
           config = {
             Cmd = [ "${linuxRustPackage}/bin/rust-redis-webserver" ];
             ExposedPorts = {
@@ -278,6 +263,16 @@
           name = "rust-redis-webserver";
           tag = "latest";
           contents = dockerContents;
+
+          # Set up user and group files, create home directory
+          fakeRootCommands = ''
+            ${linuxPkgs.dockerTools.shadowSetup}
+            groupadd -g 1000 appuser
+            useradd -u 1000 -g 1000 -m -d /home/appuser -s /bin/bash appuser
+            mkdir -p /home/appuser
+            chown -R appuser:appuser /home/appuser
+          '';
+
           config = {
             Cmd = [ "${linuxRustPackage}/bin/rust-redis-webserver" ];
             ExposedPorts = {
