@@ -105,7 +105,11 @@ impl TaskContext {
                 listener.subscribe::<outbox_publisher::OutboxJob>();
 
                 tokio::spawn(async move {
-                    listener.listen().await.unwrap();
+                    info!("PgListen starting...");
+                    match listener.listen().await {
+                        Ok(_) => info!("PgListen completed successfully"),
+                        Err(e) => tracing::error!("PgListen error: {}", e),
+                    }
                 });
 
                 // Create OutboxContext with database connection
@@ -120,6 +124,7 @@ impl TaskContext {
                     .with_storage(storage)
                     .build_fn(outbox_publisher::process_outbox_job);
 
+                info!("Registering worker: {}", OUTBOX_PUBLISHER);
                 Ok(monitor.register(worker))
             }
             _ => Err(anyhow::anyhow!("Unknown task: {}", task_name)),
