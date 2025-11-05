@@ -234,21 +234,14 @@
           tag = "latest";
           contents = dockerContents;
 
-          # Set up user and group files, create home directory
+          # Enable fakechroot for user setup commands
+          enableFakechroot = true;
+
+          # Set up non-root user with shadowSetup
           fakeRootCommands = ''
-            mkdir -p /etc
-            cat > /etc/passwd <<EOF
-            root:x:0:0:root:/root:/bin/sh
-            appuser:x:1000:1000:Application User:/home/appuser:${linuxPkgs.bashInteractive}/bin/bash
-            EOF
-
-            cat > /etc/group <<EOF
-            root:x:0:
-            appuser:x:1000:
-            EOF
-
-            mkdir -p /home/appuser
-            chown 1000:1000 /home/appuser
+            ${linuxPkgs.dockerTools.shadowSetup}
+            groupadd -g 1000 appuser
+            useradd -u 1000 -g 1000 -s ${linuxPkgs.bashInteractive}/bin/bash -m -d /home/appuser appuser
           '';
 
           config = {
@@ -271,21 +264,14 @@
           tag = "latest";
           contents = dockerContents;
 
-          # Set up user and group files, create home directory
+          # Enable fakechroot for user setup commands
+          enableFakechroot = true;
+
+          # Set up non-root user with shadowSetup
           fakeRootCommands = ''
-            mkdir -p /etc
-            cat > /etc/passwd <<EOF
-            root:x:0:0:root:/root:/bin/sh
-            appuser:x:1000:1000:Application User:/home/appuser:${linuxPkgs.bashInteractive}/bin/bash
-            EOF
-
-            cat > /etc/group <<EOF
-            root:x:0:
-            appuser:x:1000:
-            EOF
-
-            mkdir -p /home/appuser
-            chown 1000:1000 /home/appuser
+            ${linuxPkgs.dockerTools.shadowSetup}
+            groupadd -g 1000 appuser
+            useradd -u 1000 -g 1000 -s ${linuxPkgs.bashInteractive}/bin/bash -m -d /home/appuser appuser
           '';
 
           config = {
