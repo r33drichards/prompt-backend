@@ -89,10 +89,38 @@
           };
         };
 
+        # Create non-root user for container
+        passwdFile = linuxPkgs.writeTextFile {
+          name = "passwd";
+          text = ''
+            root:x:0:0:root:/root:/bin/sh
+            appuser:x:1000:1000:Application User:/home/appuser:/bin/sh
+          '';
+          destination = "/etc/passwd";
+        };
+
+        groupFile = linuxPkgs.writeTextFile {
+          name = "group";
+          text = ''
+            root:x:0:
+            appuser:x:1000:
+          '';
+          destination = "/etc/group";
+        };
+
+        # Create home directory structure
+        homeDir = linuxPkgs.runCommand "home-appuser" {} ''
+          mkdir -p $out/home/appuser
+          chmod 755 $out/home/appuser
+        '';
+
         dockerContents = [
           linuxRustPackage
           linuxPkgs.cacert
           linuxPkgs.claude-code
+          passwdFile
+          groupFile
+          homeDir
         ];
 
         # Script to generate TypeScript API client
@@ -238,8 +266,9 @@
             };
             Env = [
               "SSL_CERT_FILE=${linuxPkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-              "HOME=/tmp"
+              "HOME=/home/appuser"
             ];
+            User = "appuser";
           };
         };
 
@@ -256,8 +285,9 @@
             };
             Env = [
               "SSL_CERT_FILE=${linuxPkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-              "HOME=/tmp"
+              "HOME=/home/appuser"
             ];
+            User = "appuser";
           };
         };
 
