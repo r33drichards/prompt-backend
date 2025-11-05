@@ -164,6 +164,12 @@ Required for all deployments:
 - `REDIS_URL`: Redis connection string (default: `redis://127.0.0.1/`)
 - `KEYCLOAK_ISSUER`: OAuth issuer URL
 - `KEYCLOAK_JWKS_URI`: JWKS endpoint for JWT validation
+- `KEYCLOAK_URL`: Keycloak base URL (for admin API)
+- `KEYCLOAK_REALM`: Keycloak realm name
+- `KEYCLOAK_ADMIN_USERNAME`: Keycloak admin username (for token exchange)
+- `KEYCLOAK_ADMIN_PASSWORD`: Keycloak admin password (for token exchange)
+- `KEYCLOAK_CLIENT_ID`: Client ID with impersonation permissions
+- `KEYCLOAK_CLIENT_SECRET`: Client secret for token exchange
 - `ANTHROPIC_API_KEY`: For title generation
 
 Optional:

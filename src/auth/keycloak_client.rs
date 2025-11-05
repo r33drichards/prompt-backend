@@ -1,7 +1,7 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::env;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 /// Response from Keycloak's token endpoint
 #[derive(Debug, Deserialize, Serialize)]
@@ -13,15 +13,6 @@ pub struct TokenResponse {
     pub refresh_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token_type: Option<String>,
-}
-
-/// Federated identity information from Keycloak Admin API
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FederatedIdentity {
-    pub identity_provider: String,
-    pub user_id: String,
-    pub user_name: String,
 }
 
 /// Error types for Keycloak operations
@@ -47,6 +38,8 @@ pub struct KeycloakClient {
     realm: String,
     admin_username: String,
     admin_password: String,
+    client_id: String,
+    client_secret: String,
 }
 
 impl KeycloakClient {
@@ -67,6 +60,15 @@ impl KeycloakClient {
             KeycloakError::InvalidConfig("KEYCLOAK_ADMIN_PASSWORD not set".to_string())
         })?;
 
+        // Get client credentials for token exchange
+        let client_id = env::var("KEYCLOAK_CLIENT_ID").map_err(|_| {
+            KeycloakError::InvalidConfig("KEYCLOAK_CLIENT_ID not set".to_string())
+        })?;
+
+        let client_secret = env::var("KEYCLOAK_CLIENT_SECRET").map_err(|_| {
+            KeycloakError::InvalidConfig("KEYCLOAK_CLIENT_SECRET not set".to_string())
+        })?;
+
         info!(
             "Initialized Keycloak Admin client for realm '{}' at '{}'",
             realm, keycloak_base_url
@@ -78,6 +80,8 @@ impl KeycloakClient {
             realm,
             admin_username,
             admin_password,
+            client_id,
+            client_secret,
         })
     }
 
@@ -117,23 +121,65 @@ impl KeycloakClient {
         Ok(token_response.access_token)
     }
 
-    /// Get federated identities for a user
-    async fn get_federated_identities(
-        &self,
-        admin_token: &str,
-        user_id: &str,
-    ) -> Result<Vec<FederatedIdentity>, KeycloakError> {
+    /// Impersonate a user using token exchange to get their access token
+    /// This uses the admin token to exchange for a user's token
+    async fn impersonate_user(&self, user_id: &str) -> Result<String, KeycloakError> {
+        let admin_token = self.get_admin_token().await?;
+
         let url = format!(
-            "{}/admin/realms/{}/users/{}/federated-identity",
-            self.keycloak_base_url, self.realm, user_id
+            "{}/realms/{}/protocol/openid-connect/token",
+            self.keycloak_base_url, self.realm
         );
 
-        info!("Fetching federated identities for user {}", user_id);
+        info!("Impersonating user {} via token exchange", user_id);
+
+        let params = [
+            ("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange"),
+            ("client_id", &self.client_id),
+            ("client_secret", &self.client_secret),
+            ("subject_token", &admin_token),
+            ("requested_subject", user_id),
+            ("requested_token_type", "urn:ietf:params:oauth:token-type:access_token"),
+        ];
+
+        let response = self.http_client.post(&url).form(&params).send().await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            error!(
+                "Failed to impersonate user: status={}, body={}",
+                status, error_text
+            );
+
+            return Err(KeycloakError::Unauthorized(format!(
+                "Status: {}, Body: {}. Note: Ensure token-exchange is enabled and client has impersonation permissions",
+                status, error_text
+            )));
+        }
+
+        let token_response: TokenResponse = response.json().await?;
+        info!("Successfully impersonated user {}", user_id);
+        Ok(token_response.access_token)
+    }
+
+    /// Get external IdP token using the broker endpoint with user's token
+    async fn get_broker_token(
+        &self,
+        user_token: &str,
+        provider_alias: &str,
+    ) -> Result<String, KeycloakError> {
+        let url = format!(
+            "{}/realms/{}/broker/{}/token",
+            self.keycloak_base_url, self.realm, provider_alias
+        );
+
+        info!("Fetching {} token from broker endpoint", provider_alias);
 
         let response = self
             .http_client
             .get(&url)
-            .bearer_auth(admin_token)
+            .bearer_auth(user_token)
             .send()
             .await?;
 
@@ -141,28 +187,29 @@ impl KeycloakClient {
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             error!(
-                "Failed to retrieve federated identities: status={}, body={}",
+                "Failed to retrieve IdP token from broker: status={}, body={}",
                 status, error_text
             );
 
-            if status.as_u16() == 404 {
+            if status.as_u16() == 400 {
                 return Err(KeycloakError::UserNotLinked);
             }
 
             return Err(KeycloakError::Unauthorized(format!(
-                "Status: {}, Body: {}",
+                "Status: {}, Body: {}. Note: Ensure storeToken=true and 'Stored Tokens Readable' is enabled in Keycloak IdP config",
                 status, error_text
             )));
         }
 
-        let identities: Vec<FederatedIdentity> = response.json().await?;
-        Ok(identities)
+        let token_response: TokenResponse = response.json().await?;
+        Ok(token_response.access_token)
     }
 
-    /// Retrieve GitHub token for a user using Keycloak Admin API
+    /// Retrieve GitHub token for a user using Token Exchange
     ///
-    /// This method uses admin credentials to query the user's federated identity
-    /// and retrieve the stored GitHub token from Keycloak.
+    /// This method uses a two-step token exchange process:
+    /// 1. Impersonate the user using admin credentials (get user's access token)
+    /// 2. Use the impersonated token to retrieve the external IdP token from the broker endpoint
     ///
     /// # Arguments
     /// * `user_id` - The Keycloak user ID (subject from JWT)
@@ -175,67 +222,23 @@ impl KeycloakClient {
         user_id: &str,
         provider_alias: &str,
     ) -> Result<String, KeycloakError> {
-        // Step 1: Get admin access token
-        let admin_token = self.get_admin_token().await?;
-
-        // Step 2: Get user's federated identities
-        let identities = self.get_federated_identities(&admin_token, user_id).await?;
-
-        // Step 3: Find the GitHub identity
-        let github_identity = identities
-            .iter()
-            .find(|id| id.identity_provider == provider_alias)
-            .ok_or_else(|| {
-                warn!(
-                    "User {} not linked to identity provider '{}'",
-                    user_id, provider_alias
-                );
-                KeycloakError::UserNotLinked
-            })?;
-
         info!(
-            "Found {} identity for user {}: {}",
-            provider_alias, user_id, github_identity.user_name
+            "Retrieving {} token for user {} via token exchange",
+            provider_alias, user_id
         );
 
-        // Step 4: Use broker token endpoint to get the actual token
-        // We need to use the admin token to impersonate the user
-        let token_url = format!(
-            "{}/admin/realms/{}/users/{}/federated-identity/{}/token",
-            self.keycloak_base_url, self.realm, user_id, provider_alias
-        );
+        // Step 1: Impersonate the user to get their access token
+        let user_token = self.impersonate_user(user_id).await?;
 
-        info!("Fetching stored token for {} identity", provider_alias);
-
-        let response = self
-            .http_client
-            .get(&token_url)
-            .bearer_auth(&admin_token)
-            .send()
-            .await?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            error!(
-                "Failed to retrieve IdP token: status={}, body={}",
-                status, error_text
-            );
-
-            return Err(KeycloakError::Unauthorized(format!(
-                "Status: {}, Body: {}. Note: Ensure storeToken=true in Keycloak IdP config",
-                status, error_text
-            )));
-        }
-
-        let token_response: TokenResponse = response.json().await?;
+        // Step 2: Use the user's token to get the external IdP token from the broker endpoint
+        let idp_token = self.get_broker_token(&user_token, provider_alias).await?;
 
         info!(
             "Successfully retrieved {} token for user {}",
             provider_alias, user_id
         );
 
-        Ok(token_response.access_token)
+        Ok(idp_token)
     }
 
     /// Get GitHub token for a user (convenience method)
