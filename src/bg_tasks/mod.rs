@@ -2,6 +2,7 @@ pub mod outbox_publisher;
 pub mod session_poller;
 
 use anyhow::Result;
+use apalis::layers::prometheus::PrometheusLayer;
 use apalis::prelude::*;
 use apalis_sql::postgres::{PgListen, PgPool, PostgresStorage};
 use std::time::Duration;
@@ -114,6 +115,7 @@ impl TaskContext {
                 let ctx = outbox_publisher::OutboxContext { db };
 
                 let worker = WorkerBuilder::new(OUTBOX_PUBLISHER)
+                    .layer(PrometheusLayer)
                     .data(ctx)
                     .with_storage(storage)
                     .build_fn(outbox_publisher::process_outbox_job);

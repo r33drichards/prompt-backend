@@ -194,6 +194,9 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
         .to_cors()
         .expect("Failed to create CORS fairing");
 
+    // Create Prometheus registry
+    let prometheus_registry = prometheus::Registry::new();
+
     let _ = rocket::build()
         .configure(rocket::Config {
             address: "0.0.0.0".parse().expect("valid IP address"),
@@ -203,6 +206,7 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
         .attach(cors)
         .manage(db)
         .manage(jwks_cache)
+        .manage(prometheus_registry)
         .mount(
             "/",
             openapi_get_routes![
@@ -214,6 +218,7 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
                 handlers::sessions::delete,
             ],
         )
+        .mount("/", routes![handlers::metrics::metrics])
         .mount(
             "/swagger-ui/",
             make_swagger_ui(&SwaggerUIConfig {
