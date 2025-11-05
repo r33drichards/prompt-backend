@@ -87,6 +87,12 @@
           };
         };
 
+        dockerContents = [
+          linuxRustPackage
+          linuxPkgs.cacert
+          linuxPkgs.nodejs
+        ];
+
         # Script to generate TypeScript API client
         generateTypescriptClientScript = pkgs.writeShellScriptBin "generate-typescript-client" ''
           set -e
@@ -222,10 +228,7 @@
         packages.docker = linuxPkgs.dockerTools.buildLayeredImage {
           name = "rust-redis-webserver";
           tag = "latest";
-          contents = [
-            linuxRustPackage
-            linuxPkgs.cacert
-          ];
+          contents = dockerContents;
           config = {
             Cmd = [ "${linuxRustPackage}/bin/rust-redis-webserver" ];
             ExposedPorts = {
@@ -242,10 +245,7 @@
         packages.dockerStream = linuxPkgs.dockerTools.streamLayeredImage {
           name = "rust-redis-webserver";
           tag = "latest";
-          contents = [
-            linuxRustPackage
-            linuxPkgs.cacert
-          ];
+          contents = dockerContents;
           config = {
             Cmd = [ "${linuxRustPackage}/bin/rust-redis-webserver" ];
             ExposedPorts = {
