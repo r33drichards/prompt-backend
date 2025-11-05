@@ -104,7 +104,6 @@ nix run .#generateTypescriptClient
 - **Authentication** (`src/auth/`): JWT validation via Keycloak OAuth 2.0
   - `guard.rs`: Request guard for protected endpoints
   - `jwks.rs`: JWKS cache for token validation
-  - `keycloak_client.rs`: Keycloak API client
 - **Database Layer** (`src/db.rs`, `src/entities/`): SeaORM models and database connections
 - **Background Tasks** (`src/bg_tasks/`): Apalis-based async job processing
   - `outbox_publisher.rs`: Publishes from PostgreSQL outbox to downstream systems
