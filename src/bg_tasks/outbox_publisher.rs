@@ -6,7 +6,7 @@ use tracing::{error, info};
 use sandbox_client::types::ShellExecRequest;
 
 use crate::auth::KeycloakClient;
-use crate::entities::session::{self, Entity as Session, InboxStatus};
+use crate::entities::session::{self, Entity as Session};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
