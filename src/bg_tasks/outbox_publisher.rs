@@ -175,17 +175,14 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         let result = tokio::task::spawn_blocking(move || {
             info!("Running Claude Code CLI for session {}", session_id);
 
-            // Create a temporary directory for this session
-            let temp_dir = std::env::temp_dir().join(format!("claude-session-{}", session_id));
-            if let Err(e) = std::fs::create_dir_all(&temp_dir) {
+            // Create a temporary directory for this session using tempfile
+            let temp_dir = tempfile::tempdir().map_err(|e| {
                 error!("Failed to create temp directory for session {}: {}", session_id, e);
-                return Err(std::io::Error::other(
-                    format!("Failed to create temp directory: {}", e)
-                ));
-            }
+                std::io::Error::other(format!("Failed to create temp directory: {}", e))
+            })?;
 
             // Write MCP config to a file
-            let mcp_config_path = temp_dir.join("mcp_config.json");
+            let mcp_config_path = temp_dir.path().join("mcp_config.json");
             if let Err(e) = std::fs::write(&mcp_config_path, &mcp_json_string) {
                 error!("Failed to write MCP config for session {}: {}", session_id, e);
                 return Err(e);
@@ -224,13 +221,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     "--mcp-config",
                     mcp_config_path.to_str().unwrap(),
                 ])
-                .current_dir(&temp_dir)
+                .current_dir(temp_dir.path())
                 .output();
 
-            // Clean up temp directory on exit
-            if let Err(e) = std::fs::remove_dir_all(&temp_dir) {
-                error!("Failed to clean up temp directory for session {}: {}", session_id, e);
-            }
+            // Temp directory will be automatically cleaned up when temp_dir is dropped
 
             output
         })
