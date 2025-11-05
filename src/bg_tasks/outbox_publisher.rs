@@ -192,10 +192,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             }
 
             // Execute npx command locally (not in sandbox)
-            let output = std::process::Command::new("npx")
+            let output = std::process::Command::new("claude")
                 .args([
-                    "-y",
-                    "@anthropic-ai/claude-code",
                     "--append-system-prompt",
                     "you are running as a disposable task agent with a git repo checked out in a feature branch. when you completed with your task, commit and push the changes upstream",
                     "--dangerously-skip-permissions",

@@ -90,7 +90,7 @@
         dockerContents = [
           linuxRustPackage
           linuxPkgs.cacert
-          linuxPkgs.nodejs
+          linuxPkgs.claude-code
         ];
 
         # Script to generate TypeScript API client
