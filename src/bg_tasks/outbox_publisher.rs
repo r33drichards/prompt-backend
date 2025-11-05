@@ -250,7 +250,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                 if !stderr.is_empty() {
                     error!("Claude Code stderr for session {} (start)", session_id);
                     for (i, line) in stderr.lines().enumerate() {
-                        error!("Claude Code stderr[{}] for session {}: {}", i, session_id, line);
+                        error!(
+                            "Claude Code stderr[{}] for session {}: {}",
+                            i, session_id, line
+                        );
                     }
                     error!("Claude Code stderr for session {} (end)", session_id);
                 }
@@ -263,7 +266,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     );
 
                     // Log first 20 lines of stdout for debugging
-                    info!("Claude Code stdout (first 20 lines) for session {}:", session_id);
+                    info!(
+                        "Claude Code stdout (first 20 lines) for session {}:",
+                        session_id
+                    );
                     for (i, line) in stdout.lines().take(20).enumerate() {
                         info!("stdout[{}]: {}", i, line);
                     }
@@ -291,7 +297,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                         continue;
                     }
 
-                    info!("Claude Code output line {} for session {}: {}", line_count, session_id, line);
+                    info!(
+                        "Claude Code output line {} for session {}: {}",
+                        line_count, session_id, line
+                    );
 
                     // Parse JSON with error handling
                     match serde_json::from_str::<serde_json::Value>(line) {
@@ -322,7 +331,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     }
                 }
 
-                info!("Processed {} lines of output for session {}", line_count, session_id);
+                info!(
+                    "Processed {} lines of output for session {}",
+                    line_count, session_id
+                );
             }
             Ok(Err(e)) => {
                 error!(
