@@ -173,12 +173,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     tokio::spawn(async move {
         // Run npx command in blocking thread pool
         let result = tokio::task::spawn_blocking(move || {
-            // Write MCP config to temporary file
-            let config_path = format!("/tmp/borrow-{}.mcp-config", session_id);
-            if let Err(e) = std::fs::write(&config_path, &mcp_json_string_owned) {
-                error!("Failed to write MCP config for session {}: {}", session_id, e);
-                return Err(e);
-            }
+
 
             info!("Running Claude Code CLI for session {}", session_id);
 
@@ -215,13 +210,9 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     "--verbose",
                     "--strict-mcp-config",
                     "--mcp-config",
-                    &config_path,
+                    &mcp_json_string,
                 ])
                 .output();
-
-            // Cleanup temp file
-            let _ = std::fs::remove_file(&config_path);
-
             output
         })
         .await;
