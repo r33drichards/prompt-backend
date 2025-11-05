@@ -5,7 +5,6 @@ use tracing::{error, info};
 
 use sandbox_client::types::ShellExecRequest;
 
-use crate::auth::KeycloakClient;
 use crate::entities::session::{self, Entity as Session};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
@@ -77,41 +76,18 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     // Create sandbox client using the api_url
     let sbx = sandbox_client::Client::new(api_url);
 
-    // Fetch GitHub token from Keycloak using admin API
-    info!(
-        "Fetching GitHub token for user {} from Keycloak",
-        _session_model.user_id
-    );
+    // Read GitHub token from environment variable
+    info!("Reading GitHub token from environment variable");
 
-    let keycloak_client = KeycloakClient::new().map_err(|e| {
-        error!("Failed to create Keycloak client: {}", e);
-        Error::Failed(Box::new(std::io::Error::other(format!(
-            "Keycloak client error: {}",
-            e
-        ))))
+    let github_token = std::env::var("GITHUB_TOKEN").map_err(|e| {
+        error!("Failed to read GITHUB_TOKEN from environment: {}", e);
+        Error::Failed(Box::new(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "GITHUB_TOKEN environment variable not set",
+        )))
     })?;
 
-    let github_token = keycloak_client
-        .get_github_token_for_user(&_session_model.user_id)
-        .await
-        .map_err(|e| {
-            error!(
-                "Failed to fetch GitHub token for user {}: {}",
-                _session_model.user_id, e
-            );
-            Error::Failed(Box::new(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                format!(
-                    "Failed to get GitHub token: {}. Ensure user is linked to GitHub IdP",
-                    e
-                ),
-            )))
-        })?;
-
-    info!(
-        "Successfully fetched GitHub token for user {}",
-        _session_model.user_id
-    );
+    info!("Successfully read GitHub token from environment");
 
     // Authenticate with GitHub using the fetched token
     info!(
