@@ -63,7 +63,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     // Parse the response JSON to extract mcp_url and api_url
     let mcp_json_string = borrowed_ip.item["mcp_json_string"]
         .as_str()
-        .ok_or_else(|| Error::Failed("Missing mcp_json_string in response".into()))?;
+        .ok_or_else(|| Error::Failed("Missing mcp_json_string in response".into()))?
+        .to_string();
 
     info!("Borrowed sandbox - mcp_json_string: {}", mcp_json_string);
 
@@ -164,7 +165,6 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
     // Fire-and-forget task to run Claude Code CLI
     let session_id = _session_model.id;
-    let mcp_json_string_owned = mcp_json_string.to_string();
     let borrowed_ip_item = borrowed_ip.item.clone();
     let ip_allocator_url_clone = ip_allocator_url.clone();
     let session_model_clone = _session_model.clone();
@@ -173,9 +173,24 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     tokio::spawn(async move {
         // Run npx command in blocking thread pool
         let result = tokio::task::spawn_blocking(move || {
-
-
             info!("Running Claude Code CLI for session {}", session_id);
+
+            // Create a temporary directory for this session
+            let temp_dir = std::env::temp_dir().join(format!("claude-session-{}", session_id));
+            if let Err(e) = std::fs::create_dir_all(&temp_dir) {
+                error!("Failed to create temp directory for session {}: {}", session_id, e);
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to create temp directory: {}", e)
+                ));
+            }
+
+            // Write MCP config to a file
+            let mcp_config_path = temp_dir.join("mcp_config.json");
+            if let Err(e) = std::fs::write(&mcp_config_path, &mcp_json_string) {
+                error!("Failed to write MCP config for session {}: {}", session_id, e);
+                return Err(e);
+            }
 
             // Execute npx command locally (not in sandbox)
             let output = std::process::Command::new("npx")
@@ -210,9 +225,17 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     "--verbose",
                     "--strict-mcp-config",
                     "--mcp-config",
-                    &mcp_json_string,
+                    mcp_config_path.to_str().unwrap(),
                 ])
+                .current_dir(&temp_dir)
+                .env("HOME", &temp_dir)
                 .output();
+
+            // Clean up temp directory on exit
+            if let Err(e) = std::fs::remove_dir_all(&temp_dir) {
+                error!("Failed to clean up temp directory for session {}: {}", session_id, e);
+            }
+
             output
         })
         .await;
