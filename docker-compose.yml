@@ -83,7 +83,7 @@ services:
 
   webserver:
     image: rust-redis-webserver:latest
-    command: ["rust-redis-webserver", "--server", "--bg-tasks", "-A"]
+    command: ["rust-redis-webserver", "--server", "--bg-tasks=-A"]
     ports:
       - "8000:8000"
     depends_on:
