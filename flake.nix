@@ -94,7 +94,6 @@
           linuxRustPackage
           linuxPkgs.cacert
           linuxPkgs.claude-code
-          linuxPkgs.shadow  # Provides useradd, groupadd, etc.
           linuxPkgs.bashInteractive
         ];
 
@@ -237,11 +236,19 @@
 
           # Set up user and group files, create home directory
           fakeRootCommands = ''
-            ${linuxPkgs.dockerTools.shadowSetup}
-            groupadd -g 1000 appuser
-            useradd -u 1000 -g 1000 -m -d /home/appuser -s /bin/bash appuser
+            mkdir -p /etc
+            cat > /etc/passwd <<EOF
+            root:x:0:0:root:/root:/bin/sh
+            appuser:x:1000:1000:Application User:/home/appuser:${linuxPkgs.bashInteractive}/bin/bash
+            EOF
+
+            cat > /etc/group <<EOF
+            root:x:0:
+            appuser:x:1000:
+            EOF
+
             mkdir -p /home/appuser
-            chown -R appuser:appuser /home/appuser
+            chown 1000:1000 /home/appuser
           '';
 
           config = {
@@ -266,11 +273,19 @@
 
           # Set up user and group files, create home directory
           fakeRootCommands = ''
-            ${linuxPkgs.dockerTools.shadowSetup}
-            groupadd -g 1000 appuser
-            useradd -u 1000 -g 1000 -m -d /home/appuser -s /bin/bash appuser
+            mkdir -p /etc
+            cat > /etc/passwd <<EOF
+            root:x:0:0:root:/root:/bin/sh
+            appuser:x:1000:1000:Application User:/home/appuser:${linuxPkgs.bashInteractive}/bin/bash
+            EOF
+
+            cat > /etc/group <<EOF
+            root:x:0:
+            appuser:x:1000:
+            EOF
+
             mkdir -p /home/appuser
-            chown -R appuser:appuser /home/appuser
+            chown 1000:1000 /home/appuser
           '';
 
           config = {
