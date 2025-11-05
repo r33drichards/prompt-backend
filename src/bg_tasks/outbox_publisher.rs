@@ -56,7 +56,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         std::env::var("IP_ALLOCATOR_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
 
     let ip_client = ip_allocator_client::Client::new(&ip_allocator_url);
-    let borrowed_ip = ip_client.handlers_ip_borrow().await.map_err(|e| {
+    let borrowed_ip = ip_client.handlers_ip_borrow(None).await.map_err(|e| {
         error!("Failed to borrow IP: {}", e);
         Error::Failed(Box::new(e))
     })?;
