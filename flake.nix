@@ -89,10 +89,12 @@
           };
         };
 
+        # Docker image contents
         dockerContents = [
           linuxRustPackage
           linuxPkgs.cacert
           linuxPkgs.claude-code
+          linuxPkgs.bashInteractive
         ];
 
         # Script to generate TypeScript API client
@@ -231,6 +233,17 @@
           name = "rust-redis-webserver";
           tag = "latest";
           contents = dockerContents;
+
+          # Enable fakechroot for user setup commands
+          enableFakechroot = true;
+
+          # Set up non-root user with shadowSetup
+          fakeRootCommands = ''
+            ${linuxPkgs.dockerTools.shadowSetup}
+            groupadd -g 1000 appuser
+            useradd -u 1000 -g 1000 -s ${linuxPkgs.bashInteractive}/bin/bash -m -d /home/appuser appuser
+          '';
+
           config = {
             Cmd = [ "${linuxRustPackage}/bin/rust-redis-webserver" ];
             ExposedPorts = {
@@ -238,8 +251,9 @@
             };
             Env = [
               "SSL_CERT_FILE=${linuxPkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-              "HOME=/tmp"
+              "HOME=/home/appuser"
             ];
+            User = "appuser";
           };
         };
 
@@ -249,6 +263,17 @@
           name = "rust-redis-webserver";
           tag = "latest";
           contents = dockerContents;
+
+          # Enable fakechroot for user setup commands
+          enableFakechroot = true;
+
+          # Set up non-root user with shadowSetup
+          fakeRootCommands = ''
+            ${linuxPkgs.dockerTools.shadowSetup}
+            groupadd -g 1000 appuser
+            useradd -u 1000 -g 1000 -s ${linuxPkgs.bashInteractive}/bin/bash -m -d /home/appuser appuser
+          '';
+
           config = {
             Cmd = [ "${linuxRustPackage}/bin/rust-redis-webserver" ];
             ExposedPorts = {
@@ -256,8 +281,9 @@
             };
             Env = [
               "SSL_CERT_FILE=${linuxPkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-              "HOME=/tmp"
+              "HOME=/home/appuser"
             ];
+            User = "appuser";
           };
         };
 
