@@ -227,7 +227,6 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     mcp_config_path.to_str().unwrap(),
                 ])
                 .current_dir(&temp_dir)
-                .env("HOME", &temp_dir)
                 .output();
 
             // Clean up temp directory on exit
