@@ -9,7 +9,7 @@ use std::time::Duration;
 use tracing::info;
 
 /// Available background task names
-pub const OUTBOX_PUBLISHER: &str = "outbox-publisher";
+pub const OUTBOX_PUBLISHER: &str = "outbox-handler";
 
 /// Get all available task names
 pub fn all_tasks() -> Vec<&'static str> {

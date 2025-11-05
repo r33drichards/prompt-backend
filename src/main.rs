@@ -118,7 +118,7 @@ async fn main() -> anyhow::Result<()> {
 
         handles.push(bg_tasks_handle);
 
-        // Spawn session poller if outbox-publisher is enabled
+        // Spawn session poller if outbox-handler is enabled
         let poller_database_url = database_url.clone();
         let poller_handle = tokio::spawn(async move {
             info!("Starting session poller");
