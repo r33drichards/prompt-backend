@@ -48,10 +48,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             Error::Failed("Session not found".into())
         })?;
 
-
     info!("Processing active session {}", session_id);
-
-
 
     // get sbx config from ip-allocator
     // Read IP_ALLOCATOR_URL from environment, e.g., "http://localhost:8000"
