@@ -181,14 +181,29 @@ impl KeycloakClient {
         // Step 2: Get user's federated identities
         let identities = self.get_federated_identities(&admin_token, user_id).await?;
 
+        info!(
+            "Found {} federated identities for user {}: {:?}",
+            identities.len(),
+            user_id,
+            identities
+                .iter()
+                .map(|id| &id.identity_provider)
+                .collect::<Vec<_>>()
+        );
+
         // Step 3: Find the GitHub identity
         let github_identity = identities
             .iter()
             .find(|id| id.identity_provider == provider_alias)
             .ok_or_else(|| {
                 warn!(
-                    "User {} not linked to identity provider '{}'",
-                    user_id, provider_alias
+                    "User {} not linked to identity provider '{}'. Available providers: {:?}",
+                    user_id,
+                    provider_alias,
+                    identities
+                        .iter()
+                        .map(|id| &id.identity_provider)
+                        .collect::<Vec<_>>()
                 );
                 KeycloakError::UserNotLinked
             })?;
@@ -205,7 +220,10 @@ impl KeycloakClient {
             self.keycloak_base_url, self.realm, user_id, provider_alias
         );
 
-        info!("Fetching stored token for {} identity", provider_alias);
+        info!(
+            "Fetching stored token for {} identity from URL: {}",
+            provider_alias, token_url
+        );
 
         let response = self
             .http_client
@@ -218,14 +236,32 @@ impl KeycloakClient {
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             error!(
-                "Failed to retrieve IdP token: status={}, body={}",
-                status, error_text
+                "Failed to retrieve IdP token: status={}, body={}, url={}",
+                status, error_text, token_url
             );
 
-            return Err(KeycloakError::Unauthorized(format!(
-                "Status: {}, Body: {}. Note: Ensure storeToken=true in Keycloak IdP config",
-                status, error_text
-            )));
+            let error_msg = if status.as_u16() == 404 {
+                format!(
+                    "Status: {}, Body: {}. Possible causes:\n\
+                    1. User needs to log out and log back in after storeToken was enabled\n\
+                    2. Keycloak version may not support token retrieval (requires v18+)\n\
+                    3. IdP configuration may be missing 'Store Tokens' setting\n\
+                    4. Token may have expired and needs refresh\n\
+                    Troubleshooting:\n\
+                    - Verify storeToken=true in Keycloak IdP settings\n\
+                    - Check Keycloak version: {} endpoint requires Keycloak 18+\n\
+                    - Ask user to re-authenticate with GitHub\n\
+                    - Check Keycloak server logs for more details",
+                    status, error_text, token_url
+                )
+            } else {
+                format!(
+                    "Status: {}, Body: {}. Note: Ensure storeToken=true in Keycloak IdP config",
+                    status, error_text
+                )
+            };
+
+            return Err(KeycloakError::Unauthorized(error_msg));
         }
 
         let token_response: TokenResponse = response.json().await?;

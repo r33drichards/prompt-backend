@@ -223,6 +223,43 @@ Common issues:
    - Click "github"
    - Verify Client ID and Client Secret
 
+### GitHub token retrieval fails (404 error)
+
+If you see errors like `Failed to fetch GitHub token for user: Unauthorized: Status: 404 Not Found`, this means the system cannot retrieve the stored GitHub token from Keycloak. Here's how to fix it:
+
+**Root Cause**: Users who authenticated BEFORE `storeToken=true` was enabled don't have their tokens stored in Keycloak.
+
+**Solution**:
+1. **User must re-authenticate**: Ask the user to:
+   - Log out of the application
+   - Log back in using the GitHub identity provider
+   - This will store their GitHub token in Keycloak
+
+2. **Verify storeToken is enabled**:
+   - Go to Keycloak Admin Console: http://localhost:8080
+   - Navigate to: **Identity Providers** → **github**
+   - Scroll down to **Store Tokens** and ensure it's **ON**
+   - If it was OFF, turn it ON and click Save
+
+3. **Check Keycloak version**:
+   ```bash
+   docker compose logs keycloak | grep "Keycloak"
+   ```
+   The token retrieval endpoint requires Keycloak 18 or higher. If you're on an older version, upgrade Keycloak.
+
+4. **Verify user has GitHub identity linked**:
+   - Go to Keycloak Admin Console
+   - Navigate to: **Users** → find the user → **Identity Provider Links** tab
+   - You should see a link to "github"
+   - If not, the user needs to log in with GitHub
+
+5. **Check backend logs for details**:
+   ```bash
+   # When running the backend locally
+   cargo run -- --server --bg-tasks -A
+   ```
+   Look for log messages about federated identities and token retrieval
+
 ### Backend returns 401 Unauthorized
 
 1. Check you're logged in to the frontend
