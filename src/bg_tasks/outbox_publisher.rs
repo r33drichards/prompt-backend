@@ -169,130 +169,170 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let ip_allocator_url_clone = ip_allocator_url.clone();
     let session_model_clone = _session_model.clone();
     let db_clone = ctx.db.clone();
+    let sbx_clone = sbx.clone();
 
     tokio::spawn(async move {
-        // Run npx command in blocking thread pool
-        let result = tokio::task::spawn_blocking(move || {
-            info!("Running Claude Code CLI for session {}", session_id);
+        info!("Starting Claude Code CLI execution for session {}", session_id);
 
-            // Create a temporary directory for this session
-            let temp_dir = std::env::temp_dir().join(format!("claude-session-{}", session_id));
-            if let Err(e) = std::fs::create_dir_all(&temp_dir) {
-                error!("Failed to create temp directory for session {}: {}", session_id, e);
-                return Err(std::io::Error::other(
-                    format!("Failed to create temp directory: {}", e)
-                ));
+        // Check if npx is available in the sandbox
+        info!("Checking if npx is available in sandbox for session {}", session_id);
+        let npx_check_result = sbx_clone.exec_command_v1_shell_exec_post(&ShellExecRequest {
+            command: String::from("which npx && npx --version && node --version"),
+            async_mode: false,
+            id: None,
+            timeout: Some(10.0_f64),
+            exec_dir: Some(String::from("/home/gem")),
+        })
+        .await;
+
+        match npx_check_result {
+            Ok(response) => {
+                if let Some(data) = &response.data {
+                    info!("npx availability check for session {}: output={:?}, exit_code={:?}",
+                        session_id,
+                        data.output,
+                        data.exit_code
+                    );
+                } else {
+                    error!("npx availability check returned no data for session {}", session_id);
+                }
             }
-
-            // Write MCP config to a file
-            let mcp_config_path = temp_dir.join("mcp_config.json");
-            if let Err(e) = std::fs::write(&mcp_config_path, &mcp_json_string) {
-                error!("Failed to write MCP config for session {}: {}", session_id, e);
-                return Err(e);
+            Err(e) => {
+                error!("Failed to check npx availability for session {}: {}", session_id, e);
             }
+        }
 
-            // Execute npx command locally (not in sandbox)
-            let output = std::process::Command::new("npx")
-                .args([
-                    "-y",
-                    "@anthropic-ai/claude-code",
-                    "--append-system-prompt",
-                    "you are running as a disposable task agent with a git repo checked out in a feature branch. when you completed with your task, commit and push the changes upstream",
-                    "--dangerously-skip-permissions",
-                    "--print",
-                    "--output-format=stream-json",
-                    "--session-id",
-                    &session_id.to_string(),
-                    "--allowedTools",
-                    "WebSearch",
-                    "mcp__*",
-                    "ListMcpResourcesTool",
-                    "ReadMcpResourceTool",
-                    "--disallowedTools",
-                    "Bash",
-                    "Edit",
-                    "Write",
-                    "NotebookEdit",
-                    "Read",
-                    "Glob",
-                    "Grep",
-                    "KillShell",
-                    "BashOutput",
-                    "TodoWrite",
-                    "-p",
-                    "what are your available tools?",
-                    "--verbose",
-                    "--strict-mcp-config",
-                    "--mcp-config",
-                    mcp_config_path.to_str().unwrap(),
-                ])
-                .current_dir(&temp_dir)
-                .env("HOME", &temp_dir)
-                .output();
+        // Write MCP config to sandbox filesystem
+        let mcp_config_path = format!("/home/gem/.config/claude/mcp_config_{}.json", session_id);
+        info!("Writing MCP config to sandbox at: {}", mcp_config_path);
 
-            // Clean up temp directory on exit
-            if let Err(e) = std::fs::remove_dir_all(&temp_dir) {
-                error!("Failed to clean up temp directory for session {}: {}", session_id, e);
+        let write_config_result = sbx_clone.exec_command_v1_shell_exec_post(&ShellExecRequest {
+            command: format!("mkdir -p /home/gem/.config/claude && cat > {} << 'EOF'\n{}\nEOF", mcp_config_path, mcp_json_string),
+            async_mode: false,
+            id: None,
+            timeout: Some(10.0_f64),
+            exec_dir: Some(String::from("/home/gem")),
+        })
+        .await;
+
+        match write_config_result {
+            Ok(_) => {
+                info!("Successfully wrote MCP config to sandbox for session {}", session_id);
             }
+            Err(e) => {
+                error!("Failed to write MCP config to sandbox for session {}: {}", session_id, e);
+                // Continue anyway, the command might fail but we want to see the error
+            }
+        }
 
-            output
+        // Build the Claude Code CLI command
+        let claude_code_command = format!(
+            "npx -y @anthropic-ai/claude-code \
+            --append-system-prompt 'you are running as a disposable task agent with a git repo checked out in a feature branch. when you completed with your task, commit and push the changes upstream' \
+            --dangerously-skip-permissions \
+            --print \
+            --output-format=stream-json \
+            --session-id {} \
+            --allowedTools WebSearch mcp__* ListMcpResourcesTool ReadMcpResourceTool \
+            --disallowedTools Bash Edit Write NotebookEdit Read Glob Grep KillShell BashOutput TodoWrite \
+            -p 'what are your available tools?' \
+            --verbose \
+            --strict-mcp-config \
+            --mcp-config {}",
+            session_id,
+            mcp_config_path
+        );
+
+        info!("Executing Claude Code CLI in sandbox for session {}", session_id);
+        info!("Working directory: /home/gem/repo");
+        info!("Command: {}", claude_code_command);
+
+        // Execute npx command in sandbox
+        let result = sbx_clone.exec_command_v1_shell_exec_post(&ShellExecRequest {
+            command: claude_code_command,
+            async_mode: false,
+            id: None,
+            timeout: Some(300.0_f64), // 5 minutes timeout
+            exec_dir: Some(String::from("/home/gem/repo")),
         })
         .await;
 
         // Handle the result
         match result {
-            Ok(Ok(output)) => {
+            Ok(response) => {
                 info!("Claude Code CLI completed for session {}", session_id);
+                info!("Response success: {}, message: {}", response.success, response.message);
 
-                // Parse stream-json output
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
+                if let Some(data) = &response.data {
+                    let exit_code = data.exit_code.unwrap_or(-1);
+                    let output = data.output.as_deref().unwrap_or("");
 
-                if !stderr.is_empty() {
-                    info!("Claude Code stderr for session {}: {}", session_id, stderr);
-                }
+                    info!("Exit code: {}", exit_code);
+                    info!("Status: {:?}", data.status);
 
-                // Extract existing messages from the nested messages.messages field
-                let mut msgs: Vec<serde_json::Value> = session_model_clone
-                    .messages
-                    .as_ref()
-                    .and_then(|v| v.get("messages"))
-                    .and_then(|v| v.as_array())
-                    .cloned()
-                    .unwrap_or_default();
+                    if !output.is_empty() {
+                        info!("Claude Code output length: {} bytes", output.len());
 
-                // Log each line of stream-json output
-                for line in stdout.lines() {
-                    info!("Claude Code output for session {}: {}", session_id, line);
+                        // Extract existing messages from the nested messages.messages field
+                        let mut msgs: Vec<serde_json::Value> = session_model_clone
+                            .messages
+                            .as_ref()
+                            .and_then(|v| v.get("messages"))
+                            .and_then(|v| v.as_array())
+                            .cloned()
+                            .unwrap_or_default();
 
-                    let json = serde_json::from_str::<serde_json::Value>(line).unwrap();
-                    msgs.push(json);
+                        // Log each line of stream-json output
+                        for line in output.lines() {
+                            info!("Claude Code output for session {}: {}", session_id, line);
 
-                    // Update session messages in database, wrapping in messages.messages structure
-                    let mut active_session: session::ActiveModel =
-                        session_model_clone.clone().into();
-                    let messages_wrapper = serde_json::json!({
-                        "messages": msgs.clone()
-                    });
-                    active_session.messages = Set(Some(messages_wrapper));
+                            match serde_json::from_str::<serde_json::Value>(line) {
+                                Ok(json) => {
+                                    msgs.push(json);
 
-                    if let Err(e) = active_session.update(&db_clone).await {
-                        error!(
-                            "Failed to update session {} messages in database: {}",
-                            session_id, e
-                        );
+                                    // Update session messages in database, wrapping in messages.messages structure
+                                    let mut active_session: session::ActiveModel =
+                                        session_model_clone.clone().into();
+                                    let messages_wrapper = serde_json::json!({
+                                        "messages": msgs.clone()
+                                    });
+                                    active_session.messages = Set(Some(messages_wrapper));
+
+                                    if let Err(e) = active_session.update(&db_clone).await {
+                                        error!(
+                                            "Failed to update session {} messages in database: {}",
+                                            session_id, e
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to parse JSON from Claude Code output for session {}: {}", session_id, e);
+                                    error!("Line was: {}", line);
+                                }
+                            }
+                        }
+                    } else {
+                        error!("Claude Code produced no output for session {}", session_id);
                     }
+
+                    if exit_code != 0 {
+                        error!("Claude Code CLI exited with non-zero code {} for session {}", exit_code, session_id);
+                    }
+
+                    // Log console records if any
+                    if !data.console.is_empty() {
+                        info!("Console records for session {}: {} records", session_id, data.console.len());
+                        for (i, record) in data.console.iter().enumerate() {
+                            info!("Console record {}: {:?}", i, record);
+                        }
+                    }
+                } else {
+                    error!("Claude Code CLI returned no data for session {}", session_id);
                 }
-            }
-            Ok(Err(e)) => {
-                error!(
-                    "Failed to execute Claude Code CLI for session {}: {}",
-                    session_id, e
-                );
             }
             Err(e) => {
                 error!(
-                    "Failed to spawn blocking task for session {}: {}",
+                    "Failed to execute Claude Code CLI for session {}: {}",
                     session_id, e
                 );
             }
