@@ -1,6 +1,6 @@
 ---
 source: src/main.rs
-assertion_line: 277
+assertion_line: 279
 expression: spec
 ---
 {
@@ -84,6 +84,51 @@ expression: spec
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CreateSessionOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "# [400 Bad Request](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400)\nThe request given is wrongly formatted or data asked could not be fulfilled. "
+          },
+          "404": {
+            "description": "# [404 Not Found](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404)\nThis response is given when you request a page that does not exists."
+          },
+          "422": {
+            "description": "# [422 Unprocessable Entity](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/422)\nThis response is given when you request body is not correctly formatted. "
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when something wend wrong on the server. "
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/sessions/with-prompt": {
+      "post": {
+        "description": "Create a new session with an initial prompt",
+        "operationId": "handlers_sessions_create_with_prompt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionWithPromptInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSessionWithPromptOutput"
                 }
               }
             }
@@ -760,6 +805,50 @@ expression: spec
           },
           "target_branch": {
             "type": "string"
+          }
+        }
+      },
+      "CreateSessionWithPromptOutput": {
+        "type": "object",
+        "required": [
+          "message",
+          "prompt_id",
+          "session_id",
+          "success"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "prompt_id": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateSessionWithPromptInput": {
+        "type": "object",
+        "required": [
+          "messages",
+          "repo",
+          "target_branch"
+        ],
+        "properties": {
+          "repo": {
+            "type": "string"
+          },
+          "target_branch": {
+            "type": "string"
+          },
+          "messages": {},
+          "parent_id": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
