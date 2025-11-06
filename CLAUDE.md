@@ -96,6 +96,25 @@ nix run .#generateTypescriptClient
 # - PRs: @wholelottahoopla/prompt-backend-client@<version>-beta.pr<number>.<sha>
 ```
 
+## Development Workflow
+
+### Before Completing Tasks
+
+**IMPORTANT**: Before finishing any task that involves code changes, always run:
+
+```bash
+# Format code
+cargo fmt
+
+# Run clippy and fix any warnings
+cargo clippy -- -D warnings
+```
+
+These checks run automatically in CI/CD, so running them locally prevents build failures. Always ensure:
+- Code is properly formatted with `cargo fmt`
+- No clippy warnings exist
+- Tests pass with `cargo test`
+
 ## Architecture
 
 ### Core Components
