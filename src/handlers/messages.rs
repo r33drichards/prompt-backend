@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthenticatedUser;
 use crate::entities::message::{self, Entity as Message, Model as MessageModel};
-use crate::entities::prompt::{self, Entity as Prompt};
+use crate::entities::prompt::Entity as Prompt;
 use crate::entities::session::{self, Entity as Session};
 use crate::error::{Error, OResult};
 
