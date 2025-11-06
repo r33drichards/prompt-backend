@@ -423,16 +423,21 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
                     // Step 1: Configure git user
                     info!("Configuring git user for session {}", session_id);
-                    let git_config_name = sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-                        command: String::from("git config user.name 'claude-code-bot[bot]'"),
-                        async_mode: false,
-                        id: None,
-                        timeout: Some(30.0_f64),
-                        exec_dir: Some(repo_path_clone.clone()),
-                    }).await;
+                    let git_config_name = sbx
+                        .exec_command_v1_shell_exec_post(&ShellExecRequest {
+                            command: String::from("git config user.name 'claude-code-bot[bot]'"),
+                            async_mode: false,
+                            id: None,
+                            timeout: Some(30.0_f64),
+                            exec_dir: Some(repo_path_clone.clone()),
+                        })
+                        .await;
 
                     if let Err(e) = git_config_name {
-                        error!("Failed to configure git user.name for session {}: {}", session_id, e);
+                        error!(
+                            "Failed to configure git user.name for session {}: {}",
+                            session_id, e
+                        );
                     }
 
                     let git_config_email = sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
@@ -444,18 +449,23 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     }).await;
 
                     if let Err(e) = git_config_email {
-                        error!("Failed to configure git user.email for session {}: {}", session_id, e);
+                        error!(
+                            "Failed to configure git user.email for session {}: {}",
+                            session_id, e
+                        );
                     }
 
                     // Step 2: Add all changes
                     info!("Adding all changes for session {}", session_id);
-                    let git_add = sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-                        command: String::from("git add ."),
-                        async_mode: false,
-                        id: None,
-                        timeout: Some(30.0_f64),
-                        exec_dir: Some(repo_path_clone.clone()),
-                    }).await;
+                    let git_add = sbx
+                        .exec_command_v1_shell_exec_post(&ShellExecRequest {
+                            command: String::from("git add ."),
+                            async_mode: false,
+                            id: None,
+                            timeout: Some(30.0_f64),
+                            exec_dir: Some(repo_path_clone.clone()),
+                        })
+                        .await;
 
                     if let Err(e) = git_add {
                         error!("Failed to add changes for session {}: {}", session_id, e);
@@ -465,7 +475,9 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     info!("Committing changes for session {}", session_id);
                     let commit_message = format!(
                         "Claude Code: {}",
-                        title_clone.as_deref().unwrap_or(&format!("Session {}", session_id))
+                        title_clone
+                            .as_deref()
+                            .unwrap_or(&format!("Session {}", session_id))
                     );
 
                     // Use git diff --staged --quiet to check if there are changes, if not, exit 0, else commit
@@ -474,13 +486,15 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                         commit_message.replace("\"", "\\\"")
                     );
 
-                    let git_commit = sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-                        command: git_commit_cmd,
-                        async_mode: false,
-                        id: None,
-                        timeout: Some(30.0_f64),
-                        exec_dir: Some(repo_path_clone.clone()),
-                    }).await;
+                    let git_commit = sbx
+                        .exec_command_v1_shell_exec_post(&ShellExecRequest {
+                            command: git_commit_cmd,
+                            async_mode: false,
+                            id: None,
+                            timeout: Some(30.0_f64),
+                            exec_dir: Some(repo_path_clone.clone()),
+                        })
+                        .await;
 
                     match git_commit {
                         Ok(_) => {
@@ -488,24 +502,30 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
                             // Step 4: Push to remote
                             info!("Pushing changes to remote for session {}", session_id);
-                            let git_push = sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-                                command: format!("git push -u origin {}", branch_clone),
-                                async_mode: false,
-                                id: None,
-                                timeout: Some(60.0_f64),
-                                exec_dir: Some(repo_path_clone.clone()),
-                            }).await;
+                            let git_push = sbx
+                                .exec_command_v1_shell_exec_post(&ShellExecRequest {
+                                    command: format!("git push -u origin {}", branch_clone),
+                                    async_mode: false,
+                                    id: None,
+                                    timeout: Some(60.0_f64),
+                                    exec_dir: Some(repo_path_clone.clone()),
+                                })
+                                .await;
 
                             match git_push {
                                 Ok(_) => {
                                     info!("Successfully pushed changes for session {}", session_id);
 
                                     // Step 5: Create PR using gh CLI
-                                    if let (Some(_repo), Some(target_branch)) = (&repo_clone, &target_branch_clone) {
+                                    if let (Some(_repo), Some(target_branch)) =
+                                        (&repo_clone, &target_branch_clone)
+                                    {
                                         info!("Creating PR for session {}", session_id);
 
-                                        let default_title = format!("Claude Code Session {}", session_id);
-                                        let pr_title = title_clone.as_deref().unwrap_or(&default_title);
+                                        let default_title =
+                                            format!("Claude Code Session {}", session_id);
+                                        let pr_title =
+                                            title_clone.as_deref().unwrap_or(&default_title);
                                         let pr_body = format!(
                                             "## Summary\n\nAutomated changes from Claude Code session.\n\n**Prompt**: {}\n\n**Session ID**: {}\n\n---\n*This PR was automatically created by Claude Code Bot*",
                                             prompt_content_clone.chars().take(200).collect::<String>(),
@@ -520,20 +540,28 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                                             branch_clone
                                         );
 
-                                        let pr_result = sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-                                            command: gh_pr_create_cmd,
-                                            async_mode: false,
-                                            id: None,
-                                            timeout: Some(60.0_f64),
-                                            exec_dir: Some(repo_path_clone.clone()),
-                                        }).await;
+                                        let pr_result = sbx
+                                            .exec_command_v1_shell_exec_post(&ShellExecRequest {
+                                                command: gh_pr_create_cmd,
+                                                async_mode: false,
+                                                id: None,
+                                                timeout: Some(60.0_f64),
+                                                exec_dir: Some(repo_path_clone.clone()),
+                                            })
+                                            .await;
 
                                         match pr_result {
                                             Ok(pr_response) => {
-                                                info!("Successfully created PR for session {}: {:?}", session_id, pr_response);
+                                                info!(
+                                                    "Successfully created PR for session {}: {:?}",
+                                                    session_id, pr_response
+                                                );
                                             }
                                             Err(e) => {
-                                                error!("Failed to create PR for session {}: {}", session_id, e);
+                                                error!(
+                                                    "Failed to create PR for session {}: {}",
+                                                    session_id, e
+                                                );
                                             }
                                         }
                                     } else {
@@ -541,7 +569,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                                     }
                                 }
                                 Err(e) => {
-                                    error!("Failed to push changes for session {}: {}", session_id, e);
+                                    error!(
+                                        "Failed to push changes for session {}: {}",
+                                        session_id, e
+                                    );
                                 }
                             }
                         }
