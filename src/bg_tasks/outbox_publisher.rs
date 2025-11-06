@@ -422,8 +422,6 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         })
         .await;
 
-
-
         // Return borrowed IP (always, even on failure)
         info!("Returning borrowed IP for session {}", session_id);
         let ip_client = ip_allocator_client::Client::new(&ip_allocator_url_clone);
