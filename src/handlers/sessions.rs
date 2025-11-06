@@ -10,6 +10,7 @@ use sea_orm::{
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedUser;
+use crate::entities::prompt::{self, InboxStatus};
 use crate::entities::session::{self, Entity as Session, Model as SessionModel, SessionStatus};
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
@@ -26,6 +27,22 @@ pub struct CreateSessionOutput {
     pub success: bool,
     pub message: String,
     pub id: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Clone)]
+pub struct CreateSessionWithPromptInput {
+    pub repo: String,
+    pub target_branch: String,
+    pub messages: serde_json::Value,
+    pub parent_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Clone)]
+pub struct CreateSessionWithPromptOutput {
+    pub success: bool,
+    pub message: String,
+    pub session_id: String,
+    pub prompt_id: String,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -155,6 +172,98 @@ pub async fn create(
         })),
         Err(e) => Err(Error::database_error(e.to_string())),
     }
+}
+
+/// Create a new session with an initial prompt
+#[openapi]
+#[post("/sessions/with-prompt", data = "<input>")]
+pub async fn create_with_prompt(
+    user: AuthenticatedUser,
+    db: &State<DatabaseConnection>,
+    input: Json<CreateSessionWithPromptInput>,
+) -> OResult<CreateSessionWithPromptOutput> {
+    let session_id = Uuid::new_v4();
+
+    let parent = match &input.parent_id {
+        Some(p) => Some(
+            Uuid::parse_str(p)
+                .map_err(|_| Error::bad_request("Invalid parent UUID format".to_string()))?,
+        ),
+        None => None,
+    };
+
+    // Extract prompt content for title/branch generation
+    // Try to get "content" field from messages, or use the entire JSON as string
+    let prompt_content = input
+        .messages
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("New session");
+
+    // Generate title using Anthropic Haiku
+    let title = anthropic::generate_session_title(&input.repo, &input.target_branch, prompt_content)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to generate session title: {}", e);
+            "Untitled Session".to_string()
+        });
+
+    // Generate branch name
+    let generated_branch = anthropic::generate_branch_name(
+        &input.repo,
+        &input.target_branch,
+        prompt_content,
+        &session_id.to_string(),
+    )
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!("Failed to generate branch name: {}", e);
+        format!("claude/session-{}", &session_id.to_string()[..24])
+    });
+
+    let new_session = session::ActiveModel {
+        id: Set(session_id),
+        sbx_config: Set(None),
+        parent: Set(parent),
+        branch: Set(Some(generated_branch)),
+        repo: Set(Some(input.repo.clone())),
+        target_branch: Set(Some(input.target_branch.clone())),
+        title: Set(Some(title)),
+        session_status: Set(SessionStatus::Active),
+        user_id: Set(user.user_id.clone()),
+        created_at: NotSet,
+        updated_at: NotSet,
+        deleted_at: Set(None),
+    };
+
+    // Insert the session
+    new_session
+        .insert(db.inner())
+        .await
+        .map_err(|e| Error::database_error(e.to_string()))?;
+
+    // Create the initial prompt
+    let prompt_id = Uuid::new_v4();
+    let new_prompt = prompt::ActiveModel {
+        id: Set(prompt_id),
+        session_id: Set(session_id),
+        data: Set(input.messages.clone()),
+        inbox_status: Set(InboxStatus::Pending),
+        created_at: NotSet,
+        updated_at: NotSet,
+    };
+
+    new_prompt
+        .insert(db.inner())
+        .await
+        .map_err(|e| Error::database_error(e.to_string()))?;
+
+    Ok(Json(CreateSessionWithPromptOutput {
+        success: true,
+        message: "Session and prompt created successfully".to_string(),
+        session_id: session_id.to_string(),
+        prompt_id: prompt_id.to_string(),
+    }))
 }
 
 /// Read (retrieve) a session by ID
