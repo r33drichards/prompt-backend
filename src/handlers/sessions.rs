@@ -10,9 +10,7 @@ use sea_orm::{
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedUser;
-use crate::entities::session::{
-    self, Entity as Session, InboxStatus, Model as SessionModel, SessionStatus,
-};
+use crate::entities::session::{self, Entity as Session, Model as SessionModel, SessionStatus};
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
 
@@ -33,7 +31,6 @@ pub struct CreateSessionOutput {
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct SessionDto {
     pub id: String,
-    pub inbox_status: InboxStatus,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
     pub branch: Option<String>,
@@ -50,7 +47,6 @@ impl From<SessionModel> for SessionDto {
     fn from(model: SessionModel) -> Self {
         SessionDto {
             id: model.id.to_string(),
-            inbox_status: model.inbox_status,
             sbx_config: model.sbx_config,
             parent: model.parent.map(|p| p.to_string()),
             branch: model.branch,
@@ -78,7 +74,6 @@ pub struct ListSessionsOutput {
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct UpdateSessionInput {
     pub id: String,
-    pub inbox_status: InboxStatus,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
     pub branch: Option<String>,
@@ -139,7 +134,6 @@ pub async fn create(
 
     let new_session = session::ActiveModel {
         id: Set(id),
-        inbox_status: Set(InboxStatus::Active),
         sbx_config: Set(None),
         parent: Set(parent),
         branch: Set(Some(generated_branch)),
@@ -236,7 +230,6 @@ pub async fn update(
         .ok_or_else(|| Error::not_found("Session not found".to_string()))?;
 
     let mut active_session: session::ActiveModel = existing_session.into();
-    active_session.inbox_status = Set(input.inbox_status.clone());
     active_session.sbx_config = Set(input.sbx_config.clone());
     active_session.parent = Set(parent);
     active_session.branch = Set(input.branch.clone());

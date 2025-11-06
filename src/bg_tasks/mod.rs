@@ -1,4 +1,5 @@
 pub mod outbox_publisher;
+pub mod prompt_poller;
 pub mod session_poller;
 
 use anyhow::Result;

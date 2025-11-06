@@ -6,13 +6,13 @@ use tracing::{error, info};
 use sandbox_client::types::ShellExecRequest;
 
 use crate::entities::message;
-use crate::entities::prompt;
+use crate::entities::prompt::{self, Entity as Prompt};
 use crate::entities::session::{self, Entity as Session};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutboxJob {
-    pub session_id: String,
+    pub prompt_id: String,
     pub payload: serde_json::Value,
 }
 
@@ -26,17 +26,31 @@ pub struct OutboxContext {
     pub db: DatabaseConnection,
 }
 
-/// Process an outbox job: read session by ID, verify it's ACTIVE, set up sandbox, and run Claude Code
+/// Process an outbox job: read prompt by ID, get related session, set up sandbox, and run Claude Code
 pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Result<(), Error> {
-    info!("Processing outbox job for session_id: {}", job.session_id);
+    info!("Processing outbox job for prompt_id: {}", job.prompt_id);
 
-    // Parse session ID from job
-    let session_id = uuid::Uuid::parse_str(&job.session_id).map_err(|e| {
-        error!("Invalid session ID format: {}", e);
+    // Parse prompt ID from job
+    let prompt_id = uuid::Uuid::parse_str(&job.prompt_id).map_err(|e| {
+        error!("Invalid prompt ID format: {}", e);
         Error::Failed(Box::new(e))
     })?;
 
-    // Query the specific session
+    // Query the specific prompt
+    let prompt_model = Prompt::find_by_id(prompt_id)
+        .one(&ctx.db)
+        .await
+        .map_err(|e| {
+            error!("Failed to query prompt {}: {}", prompt_id, e);
+            Error::Failed(Box::new(e))
+        })?
+        .ok_or_else(|| {
+            error!("Prompt {} not found", prompt_id);
+            Error::Failed("Prompt not found".into())
+        })?;
+
+    // Query the related session
+    let session_id = prompt_model.session_id;
     let _session_model = Session::find_by_id(session_id)
         .one(&ctx.db)
         .await
@@ -49,7 +63,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             Error::Failed("Session not found".into())
         })?;
 
-    info!("Processing active session {}", session_id);
+    info!("Processing prompt {} for session {}", prompt_id, session_id);
 
     // get sbx config from ip-allocator
     // Read IP_ALLOCATOR_URL from environment, e.g., "http://localhost:8000"
@@ -167,6 +181,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
     // Fire-and-forget task to run Claude Code CLI
     let session_id = _session_model.id;
+    let prompt_id_clone = prompt_id;
     let borrowed_ip_item = borrowed_ip.item.clone();
     let ip_allocator_url_clone = ip_allocator_url.clone();
     let session_model_clone = _session_model.clone();
@@ -294,25 +309,11 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     return;
                 }
 
-                // Create a prompt for this session to store messages
-                let prompt_id = uuid::Uuid::new_v4();
-                let new_prompt = prompt::ActiveModel {
-                    id: Set(prompt_id),
-                    session_id: Set(session_id),
-                    data: Set(serde_json::json!({
-                        "type": "claude_code_execution",
-                        "timestamp": chrono::Utc::now().to_rfc3339()
-                    })),
-                    created_at: NotSet,
-                    updated_at: NotSet,
-                };
-
-                if let Err(e) = new_prompt.insert(&db_clone).await {
-                    error!("Failed to create prompt for session {}: {}", session_id, e);
-                    return;
-                }
-
-                info!("Created prompt {} for session {}", prompt_id, session_id);
+                // Use the prompt_id from the job - the prompt already exists
+                info!(
+                    "Processing output for prompt {} in session {}",
+                    prompt_id_clone, session_id
+                );
 
                 // Log each line of stream-json output and create message records
                 let mut line_count = 0;
@@ -336,7 +337,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                             let message_id = uuid::Uuid::new_v4();
                             let new_message = message::ActiveModel {
                                 id: Set(message_id),
-                                prompt_id: Set(prompt_id),
+                                prompt_id: Set(prompt_id_clone),
                                 data: Set(json),
                                 created_at: NotSet,
                                 updated_at: NotSet,
@@ -345,12 +346,12 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                             if let Err(e) = new_message.insert(&db_clone).await {
                                 error!(
                                     "Failed to create message {} for prompt {} in session {}: {}",
-                                    message_id, prompt_id, session_id, e
+                                    message_id, prompt_id_clone, session_id, e
                                 );
                             } else {
                                 info!(
                                     "Created message {} for prompt {} in session {}",
-                                    message_id, prompt_id, session_id
+                                    message_id, prompt_id_clone, session_id
                                 );
                             }
                         }
