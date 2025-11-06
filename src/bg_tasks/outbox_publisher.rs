@@ -151,11 +151,13 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         Error::Failed(Box::new(e))
     })?;
 
-    // clone the repo
+    // clone the repo using session_id as directory name
+    let repo_dir = format!("repo_{}", session_id);
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
         command: format!(
-            "git clone https://github.com/{}.git repo",
-            _session_model.repo.clone().unwrap()
+            "git clone https://github.com/{}.git {}",
+            _session_model.repo.clone().unwrap(),
+            repo_dir
         ),
         async_mode: false,
         id: None,
@@ -169,6 +171,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     })?;
 
     // checkout the target branch
+    let repo_path = format!("/home/gem/{}", repo_dir);
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
         command: format!(
             "git checkout {}",
@@ -177,7 +180,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         async_mode: false,
         id: None,
         timeout: Some(30.0_f64),
-        exec_dir: Some(String::from("/home/gem/repo")),
+        exec_dir: Some(repo_path.clone()),
     })
     .await
     .map_err(|e| {
@@ -195,7 +198,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         async_mode: false,
         id: None,
         timeout: Some(30.0_f64),
-        exec_dir: Some(String::from("/home/gem/repo")),
+        exec_dir: Some(repo_path.clone()),
     })
     .await
     .map_err(|e| {
@@ -215,6 +218,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let target_branch_clone = _session_model.target_branch.clone();
     let branch_clone = branch.clone();
     let title_clone = _session_model.title.clone();
+    let repo_path_clone = repo_path.clone();
 
     tokio::spawn(async move {
         info!("Running Claude Code CLI for session {}", session_id);
@@ -424,7 +428,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                         async_mode: false,
                         id: None,
                         timeout: Some(30.0_f64),
-                        exec_dir: Some(String::from("/home/gem/repo")),
+                        exec_dir: Some(repo_path_clone.clone()),
                     }).await;
 
                     if let Err(e) = git_config_name {
@@ -436,7 +440,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                         async_mode: false,
                         id: None,
                         timeout: Some(30.0_f64),
-                        exec_dir: Some(String::from("/home/gem/repo")),
+                        exec_dir: Some(repo_path_clone.clone()),
                     }).await;
 
                     if let Err(e) = git_config_email {
@@ -450,7 +454,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                         async_mode: false,
                         id: None,
                         timeout: Some(30.0_f64),
-                        exec_dir: Some(String::from("/home/gem/repo")),
+                        exec_dir: Some(repo_path_clone.clone()),
                     }).await;
 
                     if let Err(e) = git_add {
@@ -475,7 +479,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                         async_mode: false,
                         id: None,
                         timeout: Some(30.0_f64),
-                        exec_dir: Some(String::from("/home/gem/repo")),
+                        exec_dir: Some(repo_path_clone.clone()),
                     }).await;
 
                     match git_commit {
@@ -489,7 +493,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                                 async_mode: false,
                                 id: None,
                                 timeout: Some(60.0_f64),
-                                exec_dir: Some(String::from("/home/gem/repo")),
+                                exec_dir: Some(repo_path_clone.clone()),
                             }).await;
 
                             match git_push {
@@ -521,7 +525,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                                             async_mode: false,
                                             id: None,
                                             timeout: Some(60.0_f64),
-                                            exec_dir: Some(String::from("/home/gem/repo")),
+                                            exec_dir: Some(repo_path_clone.clone()),
                                         }).await;
 
                                         match pr_result {
