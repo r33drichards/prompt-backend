@@ -201,6 +201,150 @@ else
   exit 1
 fi
 
+# Test 10: Create session with prompt (new combined endpoint)
+echo ""
+echo "Test 10: Creating session with initial prompt using combined endpoint..."
+CREATE_WITH_PROMPT_RESPONSE=$(curl -s -X POST http://localhost:8000/sessions/with-prompt \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d '{"repo": "test-repo", "target_branch": "main", "messages": {"content": "Fix authentication bug"}, "parent_id": null}')
+echo "Create with prompt response: $CREATE_WITH_PROMPT_RESPONSE"
+
+if echo "$CREATE_WITH_PROMPT_RESPONSE" | grep -q '"success":true'; then
+  echo "✓ Test 10 passed: Session with prompt created successfully"
+  SESSION_WITH_PROMPT_ID=$(echo "$CREATE_WITH_PROMPT_RESPONSE" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4)
+  PROMPT_ID=$(echo "$CREATE_WITH_PROMPT_RESPONSE" | grep -o '"prompt_id":"[^"]*"' | cut -d'"' -f4)
+  echo "Session ID: $SESSION_WITH_PROMPT_ID"
+  echo "Prompt ID: $PROMPT_ID"
+else
+  echo "✗ Test 10 failed: Failed to create session with prompt"
+  docker compose down -v
+  exit 1
+fi
+
+# Test 11: Verify session was created
+echo ""
+echo "Test 11: Verifying session was created..."
+READ_SESSION_WITH_PROMPT=$(curl -s http://localhost:8000/sessions/$SESSION_WITH_PROMPT_ID \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
+echo "Read session response: $READ_SESSION_WITH_PROMPT"
+
+if echo "$READ_SESSION_WITH_PROMPT" | grep -q "$SESSION_WITH_PROMPT_ID"; then
+  echo "✓ Test 11 passed: Session verified"
+else
+  echo "✗ Test 11 failed: Session not found"
+  docker compose down -v
+  exit 1
+fi
+
+# Test 12: Verify prompt was created and associated with session
+echo ""
+echo "Test 12: Verifying prompt was created..."
+READ_PROMPT=$(curl -s http://localhost:8000/prompts/$PROMPT_ID \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
+echo "Read prompt response: $READ_PROMPT"
+
+if echo "$READ_PROMPT" | grep -q "$PROMPT_ID" && echo "$READ_PROMPT" | grep -q "$SESSION_WITH_PROMPT_ID"; then
+  echo "✓ Test 12 passed: Prompt verified and associated with session"
+else
+  echo "✗ Test 12 failed: Prompt not found or not associated with session"
+  docker compose down -v
+  exit 1
+fi
+
+# Test 13: Verify prompt appears in session's prompt list
+echo ""
+echo "Test 13: Listing prompts for session..."
+LIST_PROMPTS=$(curl -s http://localhost:8000/sessions/$SESSION_WITH_PROMPT_ID/prompts \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
+echo "List prompts response: $LIST_PROMPTS"
+
+if echo "$LIST_PROMPTS" | grep -q "$PROMPT_ID"; then
+  echo "✓ Test 13 passed: Prompt found in session's prompt list"
+else
+  echo "✗ Test 13 failed: Prompt not in session's prompt list"
+  docker compose down -v
+  exit 1
+fi
+
+# Test 14: Verify prompt data is correct
+echo ""
+echo "Test 14: Verifying prompt data..."
+if echo "$READ_PROMPT" | grep -q '"content":"Fix authentication bug"'; then
+  echo "✓ Test 14 passed: Prompt data is correct"
+else
+  echo "✗ Test 14 failed: Prompt data is incorrect"
+  docker compose down -v
+  exit 1
+fi
+
+# Test 15: Create session with prompt including parent_id
+echo ""
+echo "Test 15: Creating session with prompt and parent_id..."
+CREATE_WITH_PARENT=$(curl -s -X POST http://localhost:8000/sessions/with-prompt \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d "{\"repo\": \"test-repo\", \"target_branch\": \"main\", \"messages\": {\"content\": \"Refactor based on previous work\"}, \"parent_id\": \"$SESSION_WITH_PROMPT_ID\"}")
+echo "Create with parent response: $CREATE_WITH_PARENT"
+
+if echo "$CREATE_WITH_PARENT" | grep -q '"success":true'; then
+  SESSION_WITH_PARENT_ID=$(echo "$CREATE_WITH_PARENT" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4)
+  echo "✓ Test 15 passed: Session with parent created successfully (ID: $SESSION_WITH_PARENT_ID)"
+else
+  echo "✗ Test 15 failed: Failed to create session with parent"
+  docker compose down -v
+  exit 1
+fi
+
+# Test 16: Verify parent relationship
+echo ""
+echo "Test 16: Verifying parent relationship..."
+READ_CHILD_SESSION=$(curl -s http://localhost:8000/sessions/$SESSION_WITH_PARENT_ID \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
+echo "Read child session response: $READ_CHILD_SESSION"
+
+if echo "$READ_CHILD_SESSION" | grep -q "\"parent\":\"$SESSION_WITH_PROMPT_ID\""; then
+  echo "✓ Test 16 passed: Parent relationship verified"
+else
+  echo "✗ Test 16 failed: Parent relationship not found"
+  docker compose down -v
+  exit 1
+fi
+
+# Test 17: Test with complex message structure
+echo ""
+echo "Test 17: Creating session with complex message structure..."
+CREATE_COMPLEX=$(curl -s -X POST http://localhost:8000/sessions/with-prompt \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d '{"repo": "complex-repo", "target_branch": "develop", "messages": {"content": "Add feature X", "role": "user", "metadata": {"priority": "high"}}}')
+echo "Create with complex data response: $CREATE_COMPLEX"
+
+if echo "$CREATE_COMPLEX" | grep -q '"success":true'; then
+  COMPLEX_SESSION_ID=$(echo "$CREATE_COMPLEX" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4)
+  COMPLEX_PROMPT_ID=$(echo "$CREATE_COMPLEX" | grep -o '"prompt_id":"[^"]*"' | cut -d'"' -f4)
+  echo "✓ Test 17 passed: Complex message structure handled (Session: $COMPLEX_SESSION_ID, Prompt: $COMPLEX_PROMPT_ID)"
+else
+  echo "✗ Test 17 failed: Failed to handle complex message structure"
+  docker compose down -v
+  exit 1
+fi
+
+# Test 18: Verify complex prompt data
+echo ""
+echo "Test 18: Verifying complex prompt data..."
+READ_COMPLEX_PROMPT=$(curl -s http://localhost:8000/prompts/$COMPLEX_PROMPT_ID \
+  -H "Authorization: Bearer $ACCESS_TOKEN")
+echo "Read complex prompt response: $READ_COMPLEX_PROMPT"
+
+if echo "$READ_COMPLEX_PROMPT" | grep -q '"priority":"high"' && echo "$READ_COMPLEX_PROMPT" | grep -q '"role":"user"'; then
+  echo "✓ Test 18 passed: Complex prompt data preserved correctly"
+else
+  echo "✗ Test 18 failed: Complex prompt data not preserved"
+  docker compose down -v
+  exit 1
+fi
+
 echo ""
 echo "========================================="
 echo "All CRUD tests passed successfully! ✓"

@@ -52,6 +52,7 @@ fn generate_openapi_spec() -> String {
     let spec = rocket_okapi::openapi_spec![
         handlers::health::health,
         handlers::sessions::create,
+        handlers::sessions::create_with_prompt,
         handlers::sessions::read,
         handlers::sessions::list,
         handlers::sessions::update,
@@ -222,6 +223,7 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
             openapi_get_routes![
                 handlers::health::health,
                 handlers::sessions::create,
+                handlers::sessions::create_with_prompt,
                 handlers::sessions::read,
                 handlers::sessions::list,
                 handlers::sessions::update,
