@@ -1,6 +1,5 @@
 ---
 source: src/main.rs
-assertion_line: 279
 expression: spec
 ---
 {
@@ -812,8 +811,8 @@ expression: spec
         "type": "object",
         "required": [
           "message",
-          "prompt_id",
-          "session_id",
+          "promptId",
+          "sessionId",
           "success"
         ],
         "properties": {
@@ -823,10 +822,10 @@ expression: spec
           "message": {
             "type": "string"
           },
-          "session_id": {
+          "sessionId": {
             "type": "string"
           },
-          "prompt_id": {
+          "promptId": {
             "type": "string"
           }
         }
