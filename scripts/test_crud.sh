@@ -212,8 +212,8 @@ echo "Create with prompt response: $CREATE_WITH_PROMPT_RESPONSE"
 
 if echo "$CREATE_WITH_PROMPT_RESPONSE" | grep -q '"success":true'; then
   echo "✓ Test 10 passed: Session with prompt created successfully"
-  SESSION_WITH_PROMPT_ID=$(echo "$CREATE_WITH_PROMPT_RESPONSE" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4)
-  PROMPT_ID=$(echo "$CREATE_WITH_PROMPT_RESPONSE" | grep -o '"prompt_id":"[^"]*"' | cut -d'"' -f4)
+  SESSION_WITH_PROMPT_ID=$(echo "$CREATE_WITH_PROMPT_RESPONSE" | grep -o '"sessionId":"[^"]*"' | cut -d'"' -f4)
+  PROMPT_ID=$(echo "$CREATE_WITH_PROMPT_RESPONSE" | grep -o '"promptId":"[^"]*"' | cut -d'"' -f4)
   echo "Session ID: $SESSION_WITH_PROMPT_ID"
   echo "Prompt ID: $PROMPT_ID"
 else
@@ -288,7 +288,7 @@ CREATE_WITH_PARENT=$(curl -s -X POST http://localhost:8000/sessions/with-prompt 
 echo "Create with parent response: $CREATE_WITH_PARENT"
 
 if echo "$CREATE_WITH_PARENT" | grep -q '"success":true'; then
-  SESSION_WITH_PARENT_ID=$(echo "$CREATE_WITH_PARENT" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4)
+  SESSION_WITH_PARENT_ID=$(echo "$CREATE_WITH_PARENT" | grep -o '"sessionId":"[^"]*"' | cut -d'"' -f4)
   echo "✓ Test 15 passed: Session with parent created successfully (ID: $SESSION_WITH_PARENT_ID)"
 else
   echo "✗ Test 15 failed: Failed to create session with parent"
@@ -321,8 +321,8 @@ CREATE_COMPLEX=$(curl -s -X POST http://localhost:8000/sessions/with-prompt \
 echo "Create with complex data response: $CREATE_COMPLEX"
 
 if echo "$CREATE_COMPLEX" | grep -q '"success":true'; then
-  COMPLEX_SESSION_ID=$(echo "$CREATE_COMPLEX" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4)
-  COMPLEX_PROMPT_ID=$(echo "$CREATE_COMPLEX" | grep -o '"prompt_id":"[^"]*"' | cut -d'"' -f4)
+  COMPLEX_SESSION_ID=$(echo "$CREATE_COMPLEX" | grep -o '"sessionId":"[^"]*"' | cut -d'"' -f4)
+  COMPLEX_PROMPT_ID=$(echo "$CREATE_COMPLEX" | grep -o '"promptId":"[^"]*"' | cut -d'"' -f4)
   echo "✓ Test 17 passed: Complex message structure handled (Session: $COMPLEX_SESSION_ID, Prompt: $COMPLEX_PROMPT_ID)"
 else
   echo "✗ Test 17 failed: Failed to handle complex message structure"
