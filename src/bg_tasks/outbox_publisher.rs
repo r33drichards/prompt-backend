@@ -212,45 +212,60 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let prompt_content_clone = prompt_content.clone();
 
     tokio::spawn(async move {
-        // Run npx command in blocking thread pool
+        info!("Running Claude Code CLI for session {}", session_id);
+
+        // Create a temporary directory for this session using tempfile
+        // Use environment variable TMPDIR if set, otherwise use user's home directory
+        let temp_base_dir = std::env::var("TMPDIR")
+            .or_else(|_| std::env::var("TEMP_DIR"))
+            .unwrap_or_else(|_| {
+                // Fall back to user's home directory
+                std::env::var("HOME")
+                    .map(|home| format!("{}/.tmp", home))
+                    .unwrap_or_else(|_| ".".to_string())
+            });
+
+        info!("Using temp base directory: {}", temp_base_dir);
+
+        // Ensure the base directory exists
+        if let Err(e) = std::fs::create_dir_all(&temp_base_dir) {
+            error!(
+                "Failed to create base temp directory {}: {}",
+                temp_base_dir, e
+            );
+            return;
+        }
+
+        let temp_dir = match tempfile::Builder::new()
+            .prefix(&format!("claude_session_{}_", session_id))
+            .tempdir_in(&temp_base_dir)
+        {
+            Ok(dir) => dir,
+            Err(e) => {
+                error!(
+                    "Failed to create temp directory for session {} in {}: {}",
+                    session_id, temp_base_dir, e
+                );
+                return;
+            }
+        };
+
+        // Write MCP config to a file
+        let mcp_config_path = temp_dir.path().join("mcp_config.json");
+        if let Err(e) = std::fs::write(&mcp_config_path, &mcp_json_string) {
+            error!(
+                "Failed to write MCP config for session {}: {}",
+                session_id, e
+            );
+            return;
+        }
+
+        // Spawn the Claude CLI process with piped stdout/stderr for streaming
         let result = tokio::task::spawn_blocking(move || {
-            info!("Running Claude Code CLI for session {}", session_id);
+            use std::io::{BufRead, BufReader};
+            use std::process::{Command, Stdio};
 
-            // Create a temporary directory for this session using tempfile
-            // Use environment variable TMPDIR if set, otherwise use user's home directory
-            let temp_base_dir = std::env::var("TMPDIR")
-                .or_else(|_| std::env::var("TEMP_DIR"))
-                .unwrap_or_else(|_| {
-                    // Fall back to user's home directory
-                    std::env::var("HOME")
-                        .map(|home| format!("{}/.tmp", home))
-                        .unwrap_or_else(|_| ".".to_string())
-                });
-
-            info!("Using temp base directory: {}", temp_base_dir);
-
-            // Ensure the base directory exists
-            if let Err(e) = std::fs::create_dir_all(&temp_base_dir) {
-                error!("Failed to create base temp directory {}: {}", temp_base_dir, e);
-            }
-
-            let temp_dir = tempfile::Builder::new()
-                .prefix(&format!("claude_session_{}_", session_id))
-                .tempdir_in(&temp_base_dir)
-                .map_err(|e| {
-                    error!("Failed to create temp directory for session {} in {}: {}", session_id, temp_base_dir, e);
-                    std::io::Error::other(format!("Failed to create temp directory: {}", e))
-                })?;
-
-            // Write MCP config to a file
-            let mcp_config_path = temp_dir.path().join("mcp_config.json");
-            if let Err(e) = std::fs::write(&mcp_config_path, &mcp_json_string) {
-                error!("Failed to write MCP config for session {}: {}", session_id, e);
-                return Err(e);
-            }
-
-            // Execute npx command locally (not in sandbox)
-            let output = std::process::Command::new("claude")
+            let child = Command::new("claude")
                 .args([
                     "--append-system-prompt",
                     "you are running as a disposable task agent with a git repo checked out in a feature branch. when you completed with your task, commit and push the changes upstream",
@@ -283,115 +298,113 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     mcp_config_path.to_str().unwrap(),
                 ])
                 .current_dir(temp_dir.path())
-                .output();
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn();
 
-            // Temp directory will be automatically cleaned up when temp_dir is dropped
+            let mut child = match child {
+                Ok(c) => c,
+                Err(e) => {
+                    error!("Failed to spawn Claude CLI for session {}: {}", session_id, e);
+                    return Err(e);
+                }
+            };
 
-            output
+            // Take stdout and stderr handles
+            let stdout = child.stdout.take().expect("Failed to capture stdout");
+            let stderr = child.stderr.take().expect("Failed to capture stderr");
+
+            // Spawn a thread to handle stderr
+            let session_id_clone = session_id;
+            std::thread::spawn(move || {
+                let stderr_reader = BufReader::new(stderr);
+                for (i, line) in stderr_reader.lines().enumerate() {
+                    match line {
+                        Ok(line) => {
+                            error!("Claude Code stderr[{}] for session {}: {}", i, session_id_clone, line);
+                        }
+                        Err(e) => {
+                            error!("Error reading stderr for session {}: {}", session_id_clone, e);
+                            break;
+                        }
+                    }
+                }
+            });
+
+            // Read stdout line by line and send to channel
+            let stdout_reader = BufReader::new(stdout);
+            let mut line_count = 0;
+
+            for line in stdout_reader.lines() {
+                match line {
+                    Ok(line) => {
+                        line_count += 1;
+
+                        // Skip empty lines
+                        if line.trim().is_empty() {
+                            continue;
+                        }
+
+                        info!("Claude Code output line {} for session {}: {}", line_count, session_id, line);
+
+                        // Parse JSON and insert into database
+                        match serde_json::from_str::<serde_json::Value>(&line) {
+                            Ok(json) => {
+                                let message_id = uuid::Uuid::new_v4();
+                                let new_message = message::ActiveModel {
+                                    id: Set(message_id),
+                                    prompt_id: Set(prompt_id_clone),
+                                    data: Set(json),
+                                    created_at: NotSet,
+                                    updated_at: NotSet,
+                                };
+
+                                // Use tokio runtime handle to insert from blocking context
+                                let handle = tokio::runtime::Handle::current();
+                                let db_clone2 = db_clone.clone();
+                                match handle.block_on(async move {
+                                    new_message.insert(&db_clone2).await
+                                }) {
+                                    Ok(_) => {
+                                        info!("Created message {} for prompt {} in session {}", message_id, prompt_id_clone, session_id);
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to create message {} for prompt {} in session {}: {}", message_id, prompt_id_clone, session_id, e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to parse JSON at line {} for session {}: {}. Line content: {}", line_count, session_id, e, line);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error reading stdout for session {}: {}", session_id, e);
+                        break;
+                    }
+                }
+            }
+
+            info!("Processed {} lines of output for session {}", line_count, session_id);
+
+            // Wait for process to complete and get exit status
+            let status = child.wait()?;
+            info!("Claude Code CLI exit status for session {}: {:?}", session_id, status);
+
+            Ok(status)
         })
         .await;
 
         // Handle the result
         match result {
-            Ok(Ok(output)) => {
+            Ok(Ok(status)) => {
                 info!("Claude Code CLI completed for session {}", session_id);
-                info!("Claude Code CLI exit status: {:?}", output.status);
-
-                // Parse stream-json output
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-
-                // Log stderr line by line to avoid truncation
-                if !stderr.is_empty() {
-                    error!("Claude Code stderr for session {} (start)", session_id);
-                    for (i, line) in stderr.lines().enumerate() {
-                        error!(
-                            "Claude Code stderr[{}] for session {}: {}",
-                            i, session_id, line
-                        );
-                    }
-                    error!("Claude Code stderr for session {} (end)", session_id);
-                }
-
-                // Check if the command failed
-                if !output.status.success() {
+                if !status.success() {
                     error!(
                         "Claude Code CLI failed with exit status: {:?} for session {}",
-                        output.status, session_id
+                        status, session_id
                     );
-
-                    // Log first 20 lines of stdout for debugging
-                    info!(
-                        "Claude Code stdout (first 20 lines) for session {}:",
-                        session_id
-                    );
-                    for (i, line) in stdout.lines().take(20).enumerate() {
-                        info!("stdout[{}]: {}", i, line);
-                    }
-
-                    // Don't process the output further if command failed
-                    return;
                 }
-
-                // Use the prompt_id from the job - the prompt already exists
-                info!(
-                    "Processing output for prompt {} in session {}",
-                    prompt_id_clone, session_id
-                );
-
-                // Log each line of stream-json output and create message records
-                let mut line_count = 0;
-                for line in stdout.lines() {
-                    line_count += 1;
-
-                    // Skip empty lines
-                    if line.trim().is_empty() {
-                        continue;
-                    }
-
-                    info!(
-                        "Claude Code output line {} for session {}: {}",
-                        line_count, session_id, line
-                    );
-
-                    // Parse JSON with error handling
-                    match serde_json::from_str::<serde_json::Value>(line) {
-                        Ok(json) => {
-                            // Create a new message record for each line
-                            let message_id = uuid::Uuid::new_v4();
-                            let new_message = message::ActiveModel {
-                                id: Set(message_id),
-                                prompt_id: Set(prompt_id_clone),
-                                data: Set(json),
-                                created_at: NotSet,
-                                updated_at: NotSet,
-                            };
-
-                            if let Err(e) = new_message.insert(&db_clone).await {
-                                error!(
-                                    "Failed to create message {} for prompt {} in session {}: {}",
-                                    message_id, prompt_id_clone, session_id, e
-                                );
-                            } else {
-                                info!(
-                                    "Created message {} for prompt {} in session {}",
-                                    message_id, prompt_id_clone, session_id
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            error!(
-                                "Failed to parse JSON at line {} for session {}: {}. Line content: {}",
-                                line_count, session_id, e, line
-                            );
-                        }
-                    }
-                }
-
-                info!(
-                    "Processed {} lines of output for session {}",
-                    line_count, session_id
-                );
             }
             Ok(Err(e)) => {
                 error!(
