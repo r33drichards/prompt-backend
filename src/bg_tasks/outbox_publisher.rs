@@ -277,6 +277,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             r#"You are Claude, an AI assistant designed to help with GitHub issues and pull requests. Think carefully as you analyze the context and respond appropriately. Here's the context for your current task:
 Your task is to complete the request described in the task description.
 
+it will be cloned on the environment that you are connected to via the sbx cli, anc cloned into the directory: {}
+
 Instructions:
 1. For questions: Research the codebase and provide a detailed answer
 2. For implementations: Make the requested changes, commit, and push
@@ -303,7 +305,6 @@ Follow these practices for git:
 
 **For git push:**
 - Always use git push -u origin <branch-name>
-- CRITICAL: the branch should start with 'claude/' and end with matching session id, otherwise push will fail with 403 http code.
 - Only if push fails due to network errors retry up to 4 times with exponential backoff (2s, 4s, 8s, 16s)
 - Example retry logic: try push, wait 2s if failed, try again, wait 4s if failed, try again, etc.
 
@@ -312,7 +313,7 @@ Follow these practices for git:
 - If network failures occur, retry up to 4 times with exponential backoff (2s, 4s, 8s, 16s)
 - For pulls use: git pull origin <branch-name>
 
-The GitHub CLI (`gh`) is not available in this environment. For GitHub issues ask the user to provide the necessary information directly.
+The GitHub CLI (`gh`) is available in this environment.
 "#,
             repo_clone.clone().unwrap_or_else(|| "unknown/repo".to_string()),
             branch_clone
