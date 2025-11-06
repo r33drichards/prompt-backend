@@ -201,7 +201,7 @@ pub async fn list(
     }
 }
 
-/// Update an existing session (PUT - full replacement)
+/// Update an existing session (PUT - partial update, only provided fields are updated)
 #[openapi]
 #[put("/sessions/<id>", data = "<input>")]
 pub async fn update(
@@ -230,14 +230,26 @@ pub async fn update(
         .ok_or_else(|| Error::not_found("Session not found".to_string()))?;
 
     let mut active_session: session::ActiveModel = existing_session.into();
-    active_session.sbx_config = Set(input.sbx_config.clone());
-    active_session.parent = Set(parent);
-    active_session.branch = Set(input.branch.clone());
-    active_session.repo = Set(input.repo.clone());
-    active_session.target_branch = Set(input.target_branch.clone());
-    active_session.title = Set(input.title.clone());
 
-    // Only update session_status if provided
+    // Only update fields that are provided (Some)
+    if input.sbx_config.is_some() {
+        active_session.sbx_config = Set(input.sbx_config.clone());
+    }
+    if parent.is_some() || input.parent.is_some() {
+        active_session.parent = Set(parent);
+    }
+    if input.branch.is_some() {
+        active_session.branch = Set(input.branch.clone());
+    }
+    if input.repo.is_some() {
+        active_session.repo = Set(input.repo.clone());
+    }
+    if input.target_branch.is_some() {
+        active_session.target_branch = Set(input.target_branch.clone());
+    }
+    if input.title.is_some() {
+        active_session.title = Set(input.title.clone());
+    }
     if let Some(status) = &input.session_status {
         active_session.session_status = Set(status.clone());
     }
