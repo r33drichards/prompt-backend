@@ -10,7 +10,7 @@ use sea_orm::{
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedUser;
-use crate::entities::prompt::{self, InboxStatus};
+use crate::entities::prompt::{self, Entity as Prompt, InboxStatus};
 use crate::entities::session::{self, Entity as Session, Model as SessionModel, SessionStatus};
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
@@ -243,6 +243,22 @@ pub async fn create_with_prompt(
         .insert(db.inner())
         .await
         .map_err(|e| Error::database_error(e.to_string()))?;
+
+    // Check if there's already an active prompt for this session
+    // (This shouldn't happen for new sessions, but we check for consistency)
+    let active_prompt = Prompt::find()
+        .filter(prompt::Column::SessionId.eq(session_id))
+        .filter(prompt::Column::InboxStatus.eq(InboxStatus::Active))
+        .one(db.inner())
+        .await
+        .map_err(|e| Error::database_error(e.to_string()))?;
+
+    if active_prompt.is_some() {
+        return Err(Error::bad_request(
+            "Cannot create prompt: another prompt is already in progress for this session"
+                .to_string(),
+        ));
+    }
 
     // Create the initial prompt
     let prompt_id = Uuid::new_v4();

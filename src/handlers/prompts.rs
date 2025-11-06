@@ -96,6 +96,21 @@ pub async fn create(
         .map_err(|e| Error::database_error(e.to_string()))?
         .ok_or_else(|| Error::not_found("Session not found".to_string()))?;
 
+    // Check if there's already an active prompt for this session
+    let active_prompt = Prompt::find()
+        .filter(prompt::Column::SessionId.eq(session_id))
+        .filter(prompt::Column::InboxStatus.eq(InboxStatus::Active))
+        .one(db.inner())
+        .await
+        .map_err(|e| Error::database_error(e.to_string()))?;
+
+    if active_prompt.is_some() {
+        return Err(Error::bad_request(
+            "Cannot create prompt: another prompt is already in progress for this session"
+                .to_string(),
+        ));
+    }
+
     let id = Uuid::new_v4();
 
     let new_prompt = prompt::ActiveModel {
