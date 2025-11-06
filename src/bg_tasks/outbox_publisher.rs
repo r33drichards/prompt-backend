@@ -273,12 +273,18 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         let prompt_for_cli = prompt_content_clone.clone();
 
         // Load system prompt template from embedded markdown file
-        const SYSTEM_PROMPT_TEMPLATE: &str = include_str!("../../prompts/outbox_handler_system_prompt.md");
+        const SYSTEM_PROMPT_TEMPLATE: &str =
+            include_str!("../../prompts/outbox_handler_system_prompt.md");
 
         // Construct system prompt with context about the task by replacing placeholders
         let system_prompt = SYSTEM_PROMPT_TEMPLATE
             .replace("{REPO_PATH}", &repo_path_clone)
-            .replace("{REPO}", &repo_clone.clone().unwrap_or_else(|| "unknown/repo".to_string()))
+            .replace(
+                "{REPO}",
+                &repo_clone
+                    .clone()
+                    .unwrap_or_else(|| "unknown/repo".to_string()),
+            )
             .replace("{BRANCH}", &branch_clone);
 
         // Spawn the Claude CLI process with piped stdout/stderr for streaming
