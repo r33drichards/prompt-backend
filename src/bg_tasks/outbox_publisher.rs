@@ -213,11 +213,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let ip_allocator_url_clone = ip_allocator_url.clone();
     let db_clone = ctx.db.clone();
     let prompt_content_clone = prompt_content.clone();
-    let api_url_clone = api_url.to_string();
     let repo_clone = _session_model.repo.clone();
-    let target_branch_clone = _session_model.target_branch.clone();
     let branch_clone = branch.clone();
-    let title_clone = _session_model.title.clone();
     let repo_path_clone = repo_path.clone();
 
     tokio::spawn(async move {
@@ -288,7 +285,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             .replace("{BRANCH}", &branch_clone);
 
         // Spawn the Claude CLI process with piped stdout/stderr for streaming
-        tokio::task::spawn_blocking(move || {
+        let _ = tokio::task::spawn_blocking(move || {
             use std::io::{BufRead, BufReader};
             use std::process::{Command, Stdio};
 
