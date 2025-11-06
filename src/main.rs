@@ -56,6 +56,16 @@ fn generate_openapi_spec() -> String {
         handlers::sessions::list,
         handlers::sessions::update,
         handlers::sessions::delete,
+        handlers::prompts::create,
+        handlers::prompts::read,
+        handlers::prompts::list,
+        handlers::prompts::update,
+        handlers::prompts::delete,
+        handlers::messages::create,
+        handlers::messages::read,
+        handlers::messages::list,
+        handlers::messages::update,
+        handlers::messages::delete,
     ](&settings);
     serde_json::to_string_pretty(&spec).unwrap()
 }
@@ -216,6 +226,16 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
                 handlers::sessions::list,
                 handlers::sessions::update,
                 handlers::sessions::delete,
+                handlers::prompts::create,
+                handlers::prompts::read,
+                handlers::prompts::list,
+                handlers::prompts::update,
+                handlers::prompts::delete,
+                handlers::messages::create,
+                handlers::messages::read,
+                handlers::messages::list,
+                handlers::messages::update,
+                handlers::messages::delete,
             ],
         )
         .mount("/", routes![handlers::metrics::metrics])

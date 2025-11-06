@@ -18,7 +18,6 @@ use crate::services::anthropic;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct CreateSessionInput {
-    pub messages: Option<serde_json::Value>,
     pub parent: Option<String>,
     pub repo: String,
     pub target_branch: String,
@@ -34,7 +33,6 @@ pub struct CreateSessionOutput {
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct SessionDto {
     pub id: String,
-    pub messages: Option<serde_json::Value>,
     pub inbox_status: InboxStatus,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
@@ -52,7 +50,6 @@ impl From<SessionModel> for SessionDto {
     fn from(model: SessionModel) -> Self {
         SessionDto {
             id: model.id.to_string(),
-            messages: model.messages,
             inbox_status: model.inbox_status,
             sbx_config: model.sbx_config,
             parent: model.parent.map(|p| p.to_string()),
@@ -81,7 +78,6 @@ pub struct ListSessionsOutput {
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct UpdateSessionInput {
     pub id: String,
-    pub messages: Option<serde_json::Value>,
     pub inbox_status: InboxStatus,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
@@ -143,7 +139,6 @@ pub async fn create(
 
     let new_session = session::ActiveModel {
         id: Set(id),
-        messages: Set(input.messages.clone()),
         inbox_status: Set(InboxStatus::Active),
         sbx_config: Set(None),
         parent: Set(parent),
@@ -241,7 +236,6 @@ pub async fn update(
         .ok_or_else(|| Error::not_found("Session not found".to_string()))?;
 
     let mut active_session: session::ActiveModel = existing_session.into();
-    active_session.messages = Set(input.messages.clone());
     active_session.inbox_status = Set(input.inbox_status.clone());
     active_session.sbx_config = Set(input.sbx_config.clone());
     active_session.parent = Set(parent);

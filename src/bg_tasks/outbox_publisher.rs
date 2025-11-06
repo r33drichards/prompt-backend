@@ -1,10 +1,12 @@
 use apalis::prelude::*;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, NotSet, Set};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use sandbox_client::types::ShellExecRequest;
 
+use crate::entities::message;
+use crate::entities::prompt;
 use crate::entities::session::{self, Entity as Session};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
@@ -292,16 +294,27 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     return;
                 }
 
-                // Extract existing messages from the nested messages.messages field
-                let mut msgs: Vec<serde_json::Value> = session_model_clone
-                    .messages
-                    .as_ref()
-                    .and_then(|v| v.get("messages"))
-                    .and_then(|v| v.as_array())
-                    .cloned()
-                    .unwrap_or_default();
+                // Create a prompt for this session to store messages
+                let prompt_id = uuid::Uuid::new_v4();
+                let new_prompt = prompt::ActiveModel {
+                    id: Set(prompt_id),
+                    session_id: Set(session_id),
+                    data: Set(serde_json::json!({
+                        "type": "claude_code_execution",
+                        "timestamp": chrono::Utc::now().to_rfc3339()
+                    })),
+                    created_at: NotSet,
+                    updated_at: NotSet,
+                };
 
-                // Log each line of stream-json output
+                if let Err(e) = new_prompt.insert(&db_clone).await {
+                    error!("Failed to create prompt for session {}: {}", session_id, e);
+                    return;
+                }
+
+                info!("Created prompt {} for session {}", prompt_id, session_id);
+
+                // Log each line of stream-json output and create message records
                 let mut line_count = 0;
                 for line in stdout.lines() {
                     line_count += 1;
@@ -319,20 +332,25 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     // Parse JSON with error handling
                     match serde_json::from_str::<serde_json::Value>(line) {
                         Ok(json) => {
-                            msgs.push(json);
+                            // Create a new message record for each line
+                            let message_id = uuid::Uuid::new_v4();
+                            let new_message = message::ActiveModel {
+                                id: Set(message_id),
+                                prompt_id: Set(prompt_id),
+                                data: Set(json),
+                                created_at: NotSet,
+                                updated_at: NotSet,
+                            };
 
-                            // Update session messages in database, wrapping in messages.messages structure
-                            let mut active_session: session::ActiveModel =
-                                session_model_clone.clone().into();
-                            let messages_wrapper = serde_json::json!({
-                                "messages": msgs.clone()
-                            });
-                            active_session.messages = Set(Some(messages_wrapper));
-
-                            if let Err(e) = active_session.update(&db_clone).await {
+                            if let Err(e) = new_message.insert(&db_clone).await {
                                 error!(
-                                    "Failed to update session {} messages in database: {}",
-                                    session_id, e
+                                    "Failed to create message {} for prompt {} in session {}: {}",
+                                    message_id, prompt_id, session_id, e
+                                );
+                            } else {
+                                info!(
+                                    "Created message {} for prompt {} in session {}",
+                                    message_id, prompt_id, session_id
                                 );
                             }
                         }
