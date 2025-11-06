@@ -1,5 +1,5 @@
 pub mod outbox_publisher;
-pub mod session_poller;
+pub mod prompt_poller;
 
 use anyhow::Result;
 use apalis::layers::prometheus::PrometheusLayer;

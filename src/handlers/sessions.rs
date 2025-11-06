@@ -10,15 +10,12 @@ use sea_orm::{
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedUser;
-use crate::entities::session::{
-    self, Entity as Session, InboxStatus, Model as SessionModel, SessionStatus,
-};
+use crate::entities::session::{self, Entity as Session, Model as SessionModel, SessionStatus};
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct CreateSessionInput {
-    pub messages: Option<serde_json::Value>,
     pub parent: Option<String>,
     pub repo: String,
     pub target_branch: String,
@@ -34,8 +31,6 @@ pub struct CreateSessionOutput {
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct SessionDto {
     pub id: String,
-    pub messages: Option<serde_json::Value>,
-    pub inbox_status: InboxStatus,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
     pub branch: Option<String>,
@@ -52,8 +47,6 @@ impl From<SessionModel> for SessionDto {
     fn from(model: SessionModel) -> Self {
         SessionDto {
             id: model.id.to_string(),
-            messages: model.messages,
-            inbox_status: model.inbox_status,
             sbx_config: model.sbx_config,
             parent: model.parent.map(|p| p.to_string()),
             branch: model.branch,
@@ -81,8 +74,6 @@ pub struct ListSessionsOutput {
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct UpdateSessionInput {
     pub id: String,
-    pub messages: Option<serde_json::Value>,
-    pub inbox_status: InboxStatus,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
     pub branch: Option<String>,
@@ -143,8 +134,6 @@ pub async fn create(
 
     let new_session = session::ActiveModel {
         id: Set(id),
-        messages: Set(input.messages.clone()),
-        inbox_status: Set(InboxStatus::Active),
         sbx_config: Set(None),
         parent: Set(parent),
         branch: Set(Some(generated_branch)),
@@ -212,7 +201,7 @@ pub async fn list(
     }
 }
 
-/// Update an existing session (PUT - full replacement)
+/// Update an existing session (PUT - partial update, only provided fields are updated)
 #[openapi]
 #[put("/sessions/<id>", data = "<input>")]
 pub async fn update(
@@ -241,16 +230,26 @@ pub async fn update(
         .ok_or_else(|| Error::not_found("Session not found".to_string()))?;
 
     let mut active_session: session::ActiveModel = existing_session.into();
-    active_session.messages = Set(input.messages.clone());
-    active_session.inbox_status = Set(input.inbox_status.clone());
-    active_session.sbx_config = Set(input.sbx_config.clone());
-    active_session.parent = Set(parent);
-    active_session.branch = Set(input.branch.clone());
-    active_session.repo = Set(input.repo.clone());
-    active_session.target_branch = Set(input.target_branch.clone());
-    active_session.title = Set(input.title.clone());
 
-    // Only update session_status if provided
+    // Only update fields that are provided (Some)
+    if input.sbx_config.is_some() {
+        active_session.sbx_config = Set(input.sbx_config.clone());
+    }
+    if parent.is_some() || input.parent.is_some() {
+        active_session.parent = Set(parent);
+    }
+    if input.branch.is_some() {
+        active_session.branch = Set(input.branch.clone());
+    }
+    if input.repo.is_some() {
+        active_session.repo = Set(input.repo.clone());
+    }
+    if input.target_branch.is_some() {
+        active_session.target_branch = Set(input.target_branch.clone());
+    }
+    if input.title.is_some() {
+        active_session.title = Set(input.title.clone());
+    }
     if let Some(status) = &input.session_status {
         active_session.session_status = Set(status.clone());
     }

@@ -8,10 +8,6 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     #[sea_orm(column_type = "JsonBinary", nullable)]
-    pub messages: Option<Json>,
-    #[sea_orm(column_name = "inbox_status")]
-    pub inbox_status: InboxStatus,
-    #[sea_orm(column_type = "JsonBinary", nullable)]
     pub sbx_config: Option<Json>,
     #[sea_orm(nullable)]
     pub parent: Option<Uuid>,
@@ -33,24 +29,18 @@ pub struct Model {
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(has_many = "super::prompt::Entity")]
+    Prompt,
+}
+
+impl Related<super::prompt::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Prompt.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}
-
-#[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema,
-)]
-#[sea_orm(rs_type = "String", db_type = "String(Some(50))")]
-pub enum InboxStatus {
-    #[sea_orm(string_value = "pending")]
-    Pending,
-    #[sea_orm(string_value = "active")]
-    Active,
-    #[sea_orm(string_value = "completed")]
-    Completed,
-    #[sea_orm(string_value = "archived")]
-    Archived,
-}
 
 #[derive(
     Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema,

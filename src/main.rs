@@ -56,6 +56,16 @@ fn generate_openapi_spec() -> String {
         handlers::sessions::list,
         handlers::sessions::update,
         handlers::sessions::delete,
+        handlers::prompts::create,
+        handlers::prompts::read,
+        handlers::prompts::list,
+        handlers::prompts::update,
+        handlers::prompts::delete,
+        handlers::messages::create,
+        handlers::messages::read,
+        handlers::messages::list,
+        handlers::messages::update,
+        handlers::messages::delete,
     ](&settings);
     serde_json::to_string_pretty(&spec).unwrap()
 }
@@ -118,10 +128,10 @@ async fn main() -> anyhow::Result<()> {
 
         handles.push(bg_tasks_handle);
 
-        // Spawn session poller if outbox-publisher is enabled
+        // Spawn prompt poller if outbox-publisher is enabled
         let poller_database_url = database_url.clone();
         let poller_handle = tokio::spawn(async move {
-            info!("Starting session poller");
+            info!("Starting prompt poller");
 
             // Create SeaORM database connection for the poller
             let db = establish_connection(&poller_database_url).await?;
@@ -129,7 +139,7 @@ async fn main() -> anyhow::Result<()> {
             // Create PostgreSQL pool for apalis storage
             let pool = apalis_sql::postgres::PgPool::connect(&poller_database_url).await?;
 
-            bg_tasks::session_poller::run_session_poller(db, pool).await
+            bg_tasks::prompt_poller::run_prompt_poller(db, pool).await
         });
 
         handles.push(poller_handle);
@@ -216,6 +226,16 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
                 handlers::sessions::list,
                 handlers::sessions::update,
                 handlers::sessions::delete,
+                handlers::prompts::create,
+                handlers::prompts::read,
+                handlers::prompts::list,
+                handlers::prompts::update,
+                handlers::prompts::delete,
+                handlers::messages::create,
+                handlers::messages::read,
+                handlers::messages::list,
+                handlers::messages::update,
+                handlers::messages::delete,
             ],
         )
         .mount("/", routes![handlers::metrics::metrics])
