@@ -1,6 +1,6 @@
 {
   "name": "@wholelottahoopla/prompt-backend-client",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "TypeScript API client for prompt-backend",
   "author": "wholelottahoopla",
   "license": "MIT",

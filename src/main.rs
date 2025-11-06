@@ -67,6 +67,7 @@ fn generate_openapi_spec() -> String {
         handlers::messages::list,
         handlers::messages::update,
         handlers::messages::delete,
+        handlers::webhooks::return_item,
     ](&settings);
     serde_json::to_string_pretty(&spec).unwrap()
 }
@@ -238,6 +239,7 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
                 handlers::messages::list,
                 handlers::messages::update,
                 handlers::messages::delete,
+                handlers::webhooks::return_item,
             ],
         )
         .mount("/", routes![handlers::metrics::metrics])
