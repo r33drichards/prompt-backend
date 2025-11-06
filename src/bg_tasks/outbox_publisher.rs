@@ -184,7 +184,6 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let prompt_id_clone = prompt_id;
     let borrowed_ip_item = borrowed_ip.item.clone();
     let ip_allocator_url_clone = ip_allocator_url.clone();
-    let session_model_clone = _session_model.clone();
     let db_clone = ctx.db.clone();
 
     tokio::spawn(async move {

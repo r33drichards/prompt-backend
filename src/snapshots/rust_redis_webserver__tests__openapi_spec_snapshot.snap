@@ -917,19 +917,6 @@ expression: spec
           }
         }
       },
-      "CreatePromptInput": {
-        "type": "object",
-        "required": [
-          "data",
-          "session_id"
-        ],
-        "properties": {
-          "session_id": {
-            "type": "string"
-          },
-          "data": {}
-        }
-      },
       "CreatePromptOutput": {
         "type": "object",
         "required": [
@@ -946,6 +933,30 @@ expression: spec
           },
           "id": {
             "type": "string"
+          }
+        }
+      },
+      "CreatePromptInput": {
+        "type": "object",
+        "required": [
+          "data",
+          "session_id"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "data": {}
+        }
+      },
+      "ReadPromptOutput": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "$ref": "#/components/schemas/PromptDto"
           }
         }
       },
@@ -987,17 +998,6 @@ expression: spec
           "Archived"
         ]
       },
-      "ReadPromptOutput": {
-        "type": "object",
-        "required": [
-          "prompt"
-        ],
-        "properties": {
-          "prompt": {
-            "$ref": "#/components/schemas/PromptDto"
-          }
-        }
-      },
       "ListPromptsOutput": {
         "type": "object",
         "required": [
@@ -1010,15 +1010,6 @@ expression: spec
               "$ref": "#/components/schemas/PromptDto"
             }
           }
-        }
-      },
-      "UpdatePromptInput": {
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "properties": {
-          "data": {}
         }
       },
       "UpdatePromptOutput": {
@@ -1036,6 +1027,15 @@ expression: spec
           }
         }
       },
+      "UpdatePromptInput": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {}
+        }
+      },
       "DeletePromptOutput": {
         "type": "object",
         "required": [
@@ -1049,19 +1049,6 @@ expression: spec
           "message": {
             "type": "string"
           }
-        }
-      },
-      "CreateMessageInput": {
-        "type": "object",
-        "required": [
-          "data",
-          "prompt_id"
-        ],
-        "properties": {
-          "prompt_id": {
-            "type": "string"
-          },
-          "data": {}
         }
       },
       "CreateMessageOutput": {
@@ -1080,6 +1067,30 @@ expression: spec
           },
           "id": {
             "type": "string"
+          }
+        }
+      },
+      "CreateMessageInput": {
+        "type": "object",
+        "required": [
+          "data",
+          "prompt_id"
+        ],
+        "properties": {
+          "prompt_id": {
+            "type": "string"
+          },
+          "data": {}
+        }
+      },
+      "ReadMessageOutput": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/MessageDto"
           }
         }
       },
@@ -1108,17 +1119,6 @@ expression: spec
           }
         }
       },
-      "ReadMessageOutput": {
-        "type": "object",
-        "required": [
-          "message"
-        ],
-        "properties": {
-          "message": {
-            "$ref": "#/components/schemas/MessageDto"
-          }
-        }
-      },
       "ListMessagesOutput": {
         "type": "object",
         "required": [
@@ -1131,15 +1131,6 @@ expression: spec
               "$ref": "#/components/schemas/MessageDto"
             }
           }
-        }
-      },
-      "UpdateMessageInput": {
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "properties": {
-          "data": {}
         }
       },
       "UpdateMessageOutput": {
@@ -1155,6 +1146,15 @@ expression: spec
           "message": {
             "type": "string"
           }
+        }
+      },
+      "UpdateMessageInput": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {}
         }
       },
       "DeleteMessageOutput": {
