@@ -229,7 +229,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
         // Ensure the base directory exists
         if let Err(e) = std::fs::create_dir_all(&temp_base_dir) {
-            error!("Failed to create base temp directory {}: {}", temp_base_dir, e);
+            error!(
+                "Failed to create base temp directory {}: {}",
+                temp_base_dir, e
+            );
             return;
         }
 
@@ -239,7 +242,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         {
             Ok(dir) => dir,
             Err(e) => {
-                error!("Failed to create temp directory for session {} in {}: {}", session_id, temp_base_dir, e);
+                error!(
+                    "Failed to create temp directory for session {} in {}: {}",
+                    session_id, temp_base_dir, e
+                );
                 return;
             }
         };
@@ -247,7 +253,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         // Write MCP config to a file
         let mcp_config_path = temp_dir.path().join("mcp_config.json");
         if let Err(e) = std::fs::write(&mcp_config_path, &mcp_json_string) {
-            error!("Failed to write MCP config for session {}: {}", session_id, e);
+            error!(
+                "Failed to write MCP config for session {}: {}",
+                session_id, e
+            );
             return;
         }
 
@@ -391,14 +400,23 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             Ok(Ok(status)) => {
                 info!("Claude Code CLI completed for session {}", session_id);
                 if !status.success() {
-                    error!("Claude Code CLI failed with exit status: {:?} for session {}", status, session_id);
+                    error!(
+                        "Claude Code CLI failed with exit status: {:?} for session {}",
+                        status, session_id
+                    );
                 }
             }
             Ok(Err(e)) => {
-                error!("Failed to execute Claude Code CLI for session {}: {}", session_id, e);
+                error!(
+                    "Failed to execute Claude Code CLI for session {}: {}",
+                    session_id, e
+                );
             }
             Err(e) => {
-                error!("Failed to spawn blocking task for session {}: {}", session_id, e);
+                error!(
+                    "Failed to spawn blocking task for session {}: {}",
+                    session_id, e
+                );
             }
         }
 
