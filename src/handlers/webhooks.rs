@@ -47,8 +47,9 @@ pub async fn return_item(input: Json<ReturnItemInput>) -> OResult<ReturnItemOutp
     let railway_api_key = std::env::var("RAILWAY_API_KEY")
         .map_err(|_| Error::internal_server_error("RAILWAY_API_KEY not configured".to_string()))?;
 
-    let deployment_id = std::env::var("RAILWAY_DEPLOYMENT_ID")
-        .map_err(|_| Error::internal_server_error("RAILWAY_DEPLOYMENT_ID not configured".to_string()))?;
+    let deployment_id = std::env::var("RAILWAY_DEPLOYMENT_ID").map_err(|_| {
+        Error::internal_server_error("RAILWAY_DEPLOYMENT_ID not configured".to_string())
+    })?;
 
     // Prepare the GraphQL mutation
     let graphql_request = RailwayGraphQLRequest {
@@ -59,7 +60,10 @@ pub async fn return_item(input: Json<ReturnItemInput>) -> OResult<ReturnItemOutp
         operation_name: "deploymentRedeploy".to_string(),
     };
 
-    tracing::info!("Triggering Railway redeployment for deployment: {}", deployment_id);
+    tracing::info!(
+        "Triggering Railway redeployment for deployment: {}",
+        deployment_id
+    );
 
     // Make blocking HTTP request to Railway GraphQL API
     let client = reqwest::Client::new();
@@ -70,34 +74,40 @@ pub async fn return_item(input: Json<ReturnItemInput>) -> OResult<ReturnItemOutp
         .json(&graphql_request)
         .send()
         .await
-        .map_err(|e| Error::internal_server_error(format!("Failed to send Railway request: {}", e)))?;
+        .map_err(|e| {
+            Error::internal_server_error(format!("Failed to send Railway request: {}", e))
+        })?;
 
     let status = response.status();
-    let response_text = response
-        .text()
-        .await
-        .map_err(|e| Error::internal_server_error(format!("Failed to read Railway response: {}", e)))?;
+    let response_text = response.text().await.map_err(|e| {
+        Error::internal_server_error(format!("Failed to read Railway response: {}", e))
+    })?;
 
-    tracing::info!("Railway API response status: {}, body: {}", status, response_text);
+    tracing::info!(
+        "Railway API response status: {}, body: {}",
+        status,
+        response_text
+    );
 
     if !status.is_success() {
-        return Err(Error::internal_server_error(
-            format!("Railway API request failed with status {}: {}", status, response_text)
-        ));
+        return Err(Error::internal_server_error(format!(
+            "Railway API request failed with status {}: {}",
+            status, response_text
+        )));
     }
 
     // Parse the response to check for GraphQL errors
-    let graphql_response: RailwayGraphQLResponse = serde_json::from_str(&response_text)
-        .map_err(|e| Error::internal_server_error(format!("Failed to parse Railway response: {}", e)))?;
+    let graphql_response: RailwayGraphQLResponse =
+        serde_json::from_str(&response_text).map_err(|e| {
+            Error::internal_server_error(format!("Failed to parse Railway response: {}", e))
+        })?;
 
     if let Some(errors) = graphql_response.errors {
-        let error_messages: Vec<String> = errors
-            .iter()
-            .map(|e| e.to_string())
-            .collect();
-        return Err(Error::internal_server_error(
-            format!("Railway GraphQL errors: {}", error_messages.join(", "))
-        ));
+        let error_messages: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
+        return Err(Error::internal_server_error(format!(
+            "Railway GraphQL errors: {}",
+            error_messages.join(", ")
+        )));
     }
 
     tracing::info!("Railway redeployment triggered successfully");
