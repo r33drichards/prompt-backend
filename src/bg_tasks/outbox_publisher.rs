@@ -176,10 +176,30 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             info!("Running Claude Code CLI for session {}", session_id);
 
             // Create a temporary directory for this session using tempfile
-            let temp_dir = tempfile::tempdir().map_err(|e| {
-                error!("Failed to create temp directory for session {}: {}", session_id, e);
-                std::io::Error::other(format!("Failed to create temp directory: {}", e))
-            })?;
+            // Use environment variable TMPDIR if set, otherwise use user's home directory
+            let temp_base_dir = std::env::var("TMPDIR")
+                .or_else(|_| std::env::var("TEMP_DIR"))
+                .unwrap_or_else(|_| {
+                    // Fall back to user's home directory
+                    std::env::var("HOME")
+                        .map(|home| format!("{}/.tmp", home))
+                        .unwrap_or_else(|_| ".".to_string())
+                });
+
+            info!("Using temp base directory: {}", temp_base_dir);
+
+            // Ensure the base directory exists
+            if let Err(e) = std::fs::create_dir_all(&temp_base_dir) {
+                error!("Failed to create base temp directory {}: {}", temp_base_dir, e);
+            }
+
+            let temp_dir = tempfile::Builder::new()
+                .prefix(&format!("claude_session_{}_", session_id))
+                .tempdir_in(&temp_base_dir)
+                .map_err(|e| {
+                    error!("Failed to create temp directory for session {} in {}: {}", session_id, temp_base_dir, e);
+                    std::io::Error::other(format!("Failed to create temp directory: {}", e))
+                })?;
 
             // Write MCP config to a file
             let mcp_config_path = temp_dir.path().join("mcp_config.json");
