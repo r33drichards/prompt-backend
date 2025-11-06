@@ -26,6 +26,71 @@ pub struct OutboxContext {
     pub db: DatabaseConnection,
 }
 
+/// Validate and fix MCP configuration to ensure it's in the correct format for Claude Code
+fn validate_and_fix_mcp_config(mcp_json_string: &str, api_url: &str) -> Result<String, Error> {
+    // Parse the MCP JSON string
+    let parsed_config: serde_json::Value = serde_json::from_str(mcp_json_string).map_err(|e| {
+        error!("Failed to parse mcp_json_string as JSON: {}", e);
+        Error::Failed(Box::new(e))
+    })?;
+
+    // Check if it already has the mcpServers structure
+    let final_config = if parsed_config.get("mcpServers").is_some() {
+        info!("MCP config already has mcpServers structure, validating URLs...");
+
+        // Validate that the URLs point to the MCP endpoint
+        let mut config = parsed_config.clone();
+        if let Some(servers) = config.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
+            for (server_name, server_config) in servers.iter_mut() {
+                if let Some(url) = server_config.get_mut("url").and_then(|v| v.as_str()) {
+                    // Ensure the URL ends with /mcp or /v1/mcp
+                    if !url.ends_with("/mcp") && !url.ends_with("/v1/mcp") {
+                        let fixed_url = format!("{}/mcp", url.trim_end_matches('/'));
+                        info!(
+                            "Fixed MCP URL for server '{}': {} -> {}",
+                            server_name, url, fixed_url
+                        );
+                        *server_config.get_mut("url").unwrap() =
+                            serde_json::Value::String(fixed_url);
+                    }
+                }
+            }
+        }
+        config
+    } else {
+        info!("MCP config missing mcpServers structure, constructing correct format...");
+
+        // Construct the proper format
+        // The mcp_json_string might be just the server config, so wrap it
+        let mcp_url = if api_url.ends_with("/mcp") || api_url.ends_with("/v1/mcp") {
+            api_url.to_string()
+        } else {
+            format!("{}/mcp", api_url.trim_end_matches('/'))
+        };
+
+        info!("Using MCP URL: {}", mcp_url);
+
+        serde_json::json!({
+            "mcpServers": {
+                "sandbox": {
+                    "url": mcp_url,
+                    "transport": {
+                        "type": "sse"
+                    }
+                }
+            }
+        })
+    };
+
+    // Serialize back to string
+    let final_config_string = serde_json::to_string_pretty(&final_config).map_err(|e| {
+        error!("Failed to serialize MCP config: {}", e);
+        Error::Failed(Box::new(e))
+    })?;
+
+    Ok(final_config_string)
+}
+
 /// Process an outbox job: read prompt by ID, get related session, set up sandbox, and run Claude Code
 pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Result<(), Error> {
     info!("Processing outbox job for prompt_id: {}", job.prompt_id);
@@ -106,13 +171,21 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         .ok_or_else(|| Error::Failed("Missing mcp_json_string in response".into()))?
         .to_string();
 
-    info!("Borrowed sandbox - mcp_json_string: {}", mcp_json_string);
+    info!(
+        "Borrowed sandbox - raw mcp_json_string: {}",
+        mcp_json_string
+    );
 
     let api_url = borrowed_ip.item["api_url"]
         .as_str()
         .ok_or_else(|| Error::Failed("Missing api_url in response".into()))?;
 
     info!("Borrowed sandbox - api_url: {}", api_url);
+
+    // Validate and reconstruct MCP config to ensure correct format
+    let mcp_config = validate_and_fix_mcp_config(&mcp_json_string, api_url)?;
+
+    info!("Validated MCP config: {}", mcp_config);
 
     // Create sandbox client using the api_url
     let sbx = sandbox_client::Client::new(api_url);
@@ -228,6 +301,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let repo_clone = _session_model.repo.clone();
     let branch_clone = branch.clone();
     let repo_path_clone = repo_path.clone();
+    let mcp_config_clone = mcp_config.clone();
 
     tokio::spawn(async move {
         info!("Running Claude Code CLI for session {}", session_id);
@@ -270,13 +344,18 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
         // Write MCP config to a file
         let mcp_config_path = temp_dir.path().join("mcp_config.json");
-        if let Err(e) = std::fs::write(&mcp_config_path, &mcp_json_string) {
+        if let Err(e) = std::fs::write(&mcp_config_path, &mcp_config_clone) {
             error!(
                 "Failed to write MCP config for session {}: {}",
                 session_id, e
             );
             return;
         }
+
+        info!(
+            "Successfully wrote MCP config to {:?} for session {}",
+            mcp_config_path, session_id
+        );
 
         // Clone prompt_content for use in spawn_blocking
         let prompt_for_cli = prompt_content_clone.clone();
