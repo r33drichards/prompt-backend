@@ -6,8 +6,8 @@ use tracing::{error, info};
 use sandbox_client::types::ShellExecRequest;
 
 use crate::entities::message;
-use crate::entities::prompt::{self, Entity as Prompt};
-use crate::entities::session::{self, Entity as Session};
+use crate::entities::prompt::Entity as Prompt;
+use crate::entities::session::Entity as Session;
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -396,7 +396,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         }
     });
 
-    info!("Completed outbox job for session_id: {}", job.session_id);
+    info!("Completed outbox job for prompt_id: {}", job.prompt_id);
 
     Ok(())
 }
