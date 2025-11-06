@@ -420,11 +420,25 @@ mod tests {
         let json = serde_json::to_string(&output).expect("Failed to serialize");
 
         // Verify the fields are in camelCase
-        assert!(json.contains("\"sessionId\""), "Expected sessionId in camelCase, got: {}", json);
-        assert!(json.contains("\"promptId\""), "Expected promptId in camelCase, got: {}", json);
+        assert!(
+            json.contains("\"sessionId\""),
+            "Expected sessionId in camelCase, got: {}",
+            json
+        );
+        assert!(
+            json.contains("\"promptId\""),
+            "Expected promptId in camelCase, got: {}",
+            json
+        );
 
         // Verify no snake_case fields
-        assert!(!json.contains("\"session_id\""), "Found snake_case session_id, expected camelCase");
-        assert!(!json.contains("\"prompt_id\""), "Found snake_case prompt_id, expected camelCase");
+        assert!(
+            !json.contains("\"session_id\""),
+            "Found snake_case session_id, expected camelCase"
+        );
+        assert!(
+            !json.contains("\"prompt_id\""),
+            "Found snake_case prompt_id, expected camelCase"
+        );
     }
 }
