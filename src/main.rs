@@ -78,6 +78,16 @@ async fn main() -> anyhow::Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt::init();
 
+    // Print version information
+    let git_commit = option_env!("VERGEN_GIT_SHA").unwrap_or("unknown");
+    let git_branch = option_env!("VERGEN_GIT_BRANCH").unwrap_or("unknown");
+    let build_timestamp = option_env!("VERGEN_BUILD_TIMESTAMP").unwrap_or("unknown");
+
+    info!("Starting prompt-backend");
+    info!("Git commit: {}", git_commit);
+    info!("Git branch: {}", git_branch);
+    info!("Build timestamp: {}", build_timestamp);
+
     let cli = Cli::parse();
 
     // Handle print-openapi command
