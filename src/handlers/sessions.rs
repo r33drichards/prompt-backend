@@ -38,6 +38,7 @@ pub struct CreateSessionWithPromptInput {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateSessionWithPromptOutput {
     pub success: bool,
     pub message: String,
@@ -400,5 +401,30 @@ pub async fn delete(
             message: "Session deleted successfully".to_string(),
         })),
         Err(e) => Err(Error::database_error(e.to_string())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_session_with_prompt_output_serialization() {
+        let output = CreateSessionWithPromptOutput {
+            success: true,
+            message: "Test message".to_string(),
+            session_id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            prompt_id: "660e8400-e29b-41d4-a716-446655440001".to_string(),
+        };
+
+        let json = serde_json::to_string(&output).expect("Failed to serialize");
+
+        // Verify the fields are in camelCase
+        assert!(json.contains("\"sessionId\""), "Expected sessionId in camelCase, got: {}", json);
+        assert!(json.contains("\"promptId\""), "Expected promptId in camelCase, got: {}", json);
+
+        // Verify no snake_case fields
+        assert!(!json.contains("\"session_id\""), "Found snake_case session_id, expected camelCase");
+        assert!(!json.contains("\"prompt_id\""), "Found snake_case prompt_id, expected camelCase");
     }
 }
