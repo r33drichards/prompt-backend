@@ -150,6 +150,14 @@ impl Error {
             http_status_code: 404,
         }
     }
+
+    pub fn internal_server_error(msg: String) -> Self {
+        Error {
+            err: "Internal Server Error".to_owned(),
+            msg: Some(msg),
+            http_status_code: 500,
+        }
+    }
 }
 
 pub type OResult<T> = std::result::Result<rocket::serde::json::Json<T>, Error>;
