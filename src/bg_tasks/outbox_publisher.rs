@@ -170,6 +170,33 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let session_model_clone = _session_model.clone();
     let db_clone = ctx.db.clone();
 
+    // Extract the latest prompt from messages
+    let latest_prompt = _session_model
+        .messages
+        .as_ref()
+        .and_then(|v| v.get("messages"))
+        .and_then(|v| v.as_array())
+        .and_then(|messages| {
+            // Filter for messages with type "prompt" and get the last one
+            messages
+                .iter()
+                .filter(|msg| {
+                    msg.get("type")
+                        .and_then(|t| t.as_str())
+                        .map_or(false, |t| t == "prompt")
+                })
+                .last()
+        })
+        .and_then(|msg| msg.get("content"))
+        .and_then(|content| content.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| {
+            info!("No prompt found in messages, using default");
+            "what are your available tools?".to_string()
+        });
+
+    info!("Using prompt for session {}: {}", session_id, latest_prompt);
+
     tokio::spawn(async move {
         // Run npx command in blocking thread pool
         let result = tokio::task::spawn_blocking(move || {
@@ -235,7 +262,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     "BashOutput",
                     "TodoWrite",
                     "-p",
-                    "what are your available tools?",
+                    &latest_prompt,
                     "--verbose",
                     "--strict-mcp-config",
                     "--mcp-config",
