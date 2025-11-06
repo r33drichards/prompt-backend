@@ -65,6 +65,30 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
     info!("Processing prompt {} for session {}", prompt_id, session_id);
 
+    // Extract prompt content from the data field
+    let prompt_content = match &prompt_model.data {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Object(obj) => {
+            // Try to extract from common field names: "content", "prompt", "text", "message"
+            obj.get("content")
+                .or_else(|| obj.get("prompt"))
+                .or_else(|| obj.get("text"))
+                .or_else(|| obj.get("message"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| {
+                    // If no common field found, serialize the entire object as a string
+                    serde_json::to_string(&prompt_model.data).unwrap_or_default()
+                })
+        }
+        _ => serde_json::to_string(&prompt_model.data).unwrap_or_default(),
+    };
+
+    info!(
+        "Extracted prompt content (first 100 chars): {}",
+        prompt_content.chars().take(100).collect::<String>()
+    );
+
     // get sbx config from ip-allocator
     // Read IP_ALLOCATOR_URL from environment, e.g., "http://localhost:8000"
     let ip_allocator_url =
@@ -185,6 +209,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let borrowed_ip_item = borrowed_ip.item.clone();
     let ip_allocator_url_clone = ip_allocator_url.clone();
     let db_clone = ctx.db.clone();
+    let prompt_content_clone = prompt_content.clone();
 
     tokio::spawn(async move {
         // Run npx command in blocking thread pool
@@ -251,7 +276,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     "BashOutput",
                     "TodoWrite",
                     "-p",
-                    "what are your available tools?",
+                    &prompt_content_clone,
                     "--verbose",
                     "--strict-mcp-config",
                     "--mcp-config",
