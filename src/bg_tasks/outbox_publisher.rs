@@ -316,7 +316,9 @@ Follow these practices for git:
 The GitHub CLI (`gh`) is available in this environment.
 "#,
             repo_path_clone,
-            repo_clone.clone().unwrap_or_else(|| "unknown/repo".to_string()),
+            repo_clone
+                .clone()
+                .unwrap_or_else(|| "unknown/repo".to_string()),
             branch_clone
         );
 
