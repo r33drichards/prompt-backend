@@ -151,6 +151,24 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         Error::Failed(Box::new(e))
     })?;
 
+    // Configure git to use gh as credential helper
+    info!(
+        "Configuring git to use GitHub CLI credentials for session {}",
+        _session_model.id
+    );
+    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+        command: String::from("gh auth setup-git"),
+        async_mode: false,
+        id: None,
+        timeout: Some(30.0_f64),
+        exec_dir: Some(String::from("/home/gem")),
+    })
+    .await
+    .map_err(|e| {
+        error!("Failed to setup git credentials: {}", e);
+        Error::Failed(Box::new(e))
+    })?;
+
     // clone the repo using session_id as directory name
     let repo_dir = format!("repo_{}", session_id);
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
