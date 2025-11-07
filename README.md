@@ -370,10 +370,7 @@ The application includes an Apalis-based background job processing system with t
 ### Running the Application
 
 ```bash
-# Run all background tasks only (default)
-cargo run
-
-# Run web server + all background tasks
+# Run web server and all background tasks
 cargo run -- --server
 
 # Print OpenAPI specification
@@ -382,10 +379,10 @@ cargo run -- print-openapi
 
 ### CLI Options
 
-- `--server`: Run the web server (background tasks always run)
+- `--server`: Run the web server and all background tasks
 - `print-openapi`: Print OpenAPI specification and exit
 
-**Note**: Background tasks (outbox-publisher, ip-return-poller, prompt-poller) always run automatically.
+**Note**: The `--server` flag starts both the web server and all background tasks (outbox-publisher, ip-return-poller, prompt-poller) together.
 
 ### Task Implementations
 

@@ -11,17 +11,14 @@ This is a Rust web service built with Rocket, providing a session management API
 ### Running the Application
 
 ```bash
-# Run all background tasks only (default)
-cargo run
-
-# Run web server + all background tasks
+# Run web server and all background tasks
 cargo run -- --server
 
 # Print OpenAPI specification
 cargo run -- print-openapi
 ```
 
-**Note**: Background tasks (outbox-publisher, ip-return-poller, prompt-poller) always run automatically. Use `--server` to also start the web server.
+**Note**: The `--server` flag starts both the web server and all background tasks (outbox-publisher, ip-return-poller, prompt-poller) together.
 
 ### Development with Nix
 
