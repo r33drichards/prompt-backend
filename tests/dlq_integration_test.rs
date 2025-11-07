@@ -8,8 +8,9 @@ use uuid::Uuid;
 /// Helper function to create a test database connection
 /// Returns None if database is not available (for CI/CD environments without test DB)
 async fn try_create_test_db() -> Option<DatabaseConnection> {
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://promptuser:promptpass@localhost:5432/prompt_backend_test".to_string());
+    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://promptuser:promptpass@localhost:5432/prompt_backend_test".to_string()
+    });
 
     sea_orm::Database::connect(&database_url).await.ok()
 }
@@ -172,9 +173,7 @@ async fn test_dlq_filters_by_status() {
             rust_redis_webserver::entities::dead_letter_queue::Column::Status
                 .eq(DlqStatus::Pending),
         )
-        .filter(
-            rust_redis_webserver::entities::dead_letter_queue::Column::EntityId.eq(entity_id),
-        )
+        .filter(rust_redis_webserver::entities::dead_letter_queue::Column::EntityId.eq(entity_id))
         .all(&db)
         .await
         .expect("Failed to query DLQ");
@@ -187,14 +186,15 @@ async fn test_dlq_filters_by_status() {
             rust_redis_webserver::entities::dead_letter_queue::Column::Status
                 .eq(DlqStatus::Resolved),
         )
-        .filter(
-            rust_redis_webserver::entities::dead_letter_queue::Column::EntityId.eq(entity_id),
-        )
+        .filter(rust_redis_webserver::entities::dead_letter_queue::Column::EntityId.eq(entity_id))
         .all(&db)
         .await
         .expect("Failed to query DLQ");
 
-    assert!(resolved_entries.is_empty(), "Should not find resolved entry");
+    assert!(
+        resolved_entries.is_empty(),
+        "Should not find resolved entry"
+    );
 
     // Clean up
     let _ = DeadLetterQueue::delete_by_id(entry.id).exec(&db).await;
