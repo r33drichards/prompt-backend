@@ -31,13 +31,9 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Run the web server
+    /// Run the web server and background tasks
     #[arg(long)]
     server: bool,
-
-    /// Enable background tasks. Use -A/--all to run all tasks, or specify task names
-    #[arg(long = "bg-tasks", value_name = "TASKS")]
-    bg_tasks: Vec<String>,
 }
 
 #[derive(Subcommand, PartialEq)]
@@ -90,21 +86,9 @@ async fn main() -> anyhow::Result<()> {
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    // Determine which background tasks to run (empty vec if none specified)
-    let bg_task_names: Vec<String> = if cli.bg_tasks.contains(&"-A".to_string())
-        || cli.bg_tasks.contains(&"--all".to_string())
-    {
-        bg_tasks::all_tasks()
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect()
-    } else {
-        cli.bg_tasks
-    };
-
     let mut handles = vec![];
 
-    // Spawn server if --server flag is present
+    // Spawn server and background tasks if --server flag is present
     if cli.server {
         let server_redis_url = redis_url.clone();
         let server_database_url = database_url.clone();
@@ -115,10 +99,13 @@ async fn main() -> anyhow::Result<()> {
         });
 
         handles.push(server_handle);
-    }
 
-    // Spawn background tasks if --bg-tasks flag is present
-    if !bg_task_names.is_empty() {
+        // Spawn all background tasks
+        let bg_task_names: Vec<String> = bg_tasks::all_tasks()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+
         let task_database_url = Some(database_url.clone());
         let bg_tasks_handle = tokio::spawn(async move {
             info!("Starting background tasks");
@@ -130,7 +117,7 @@ async fn main() -> anyhow::Result<()> {
 
         handles.push(bg_tasks_handle);
 
-        // Spawn prompt poller if outbox-publisher is enabled
+        // Spawn prompt poller
         let poller_database_url = database_url.clone();
         let poller_handle = tokio::spawn(async move {
             info!("Starting prompt poller");
@@ -145,11 +132,24 @@ async fn main() -> anyhow::Result<()> {
         });
 
         handles.push(poller_handle);
+
+        // Spawn IP return poller
+        let ip_return_database_url = database_url.clone();
+        let ip_return_handle = tokio::spawn(async move {
+            info!("Starting IP return poller");
+
+            // Create SeaORM database connection for the poller
+            let db = establish_connection(&ip_return_database_url).await?;
+
+            bg_tasks::ip_return_poller::run_ip_return_poller(db).await
+        });
+
+        handles.push(ip_return_handle);
     }
 
     // If no services specified, error out
     if handles.is_empty() {
-        eprintln!("No services specified. Use --server and/or --bg-tasks, or --help for usage.");
+        eprintln!("No services specified. Use --server to start the web server and background tasks, or --help for usage.");
         return Err(anyhow::anyhow!("No services specified"));
     }
 

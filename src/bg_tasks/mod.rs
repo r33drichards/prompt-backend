@@ -1,3 +1,4 @@
+pub mod ip_return_poller;
 pub mod outbox_publisher;
 pub mod prompt_poller;
 
@@ -10,10 +11,11 @@ use tracing::info;
 
 /// Available background task names
 pub const OUTBOX_PUBLISHER: &str = "outbox-publisher";
+pub const IP_RETURN_POLLER: &str = "ip-return-poller";
 
 /// Get all available task names
 pub fn all_tasks() -> Vec<&'static str> {
-    vec![OUTBOX_PUBLISHER]
+    vec![OUTBOX_PUBLISHER, IP_RETURN_POLLER]
 }
 
 /// Context for running background tasks, holds optional connections to backends
@@ -126,6 +128,11 @@ impl TaskContext {
 
                 info!("Registering worker: {}", OUTBOX_PUBLISHER);
                 Ok(monitor.register(worker))
+            }
+            IP_RETURN_POLLER => {
+                // IP return poller is spawned directly in main.rs like prompt_poller
+                info!("IP return poller is spawned separately in main.rs");
+                Ok(monitor)
             }
             _ => Err(anyhow::anyhow!("Unknown task: {}", task_name)),
         }

@@ -956,7 +956,8 @@ expression: spec
         "type": "string",
         "enum": [
           "Active",
-          "Archived"
+          "Archived",
+          "ReturningIp"
         ]
       },
       "ListSessionsOutput": {

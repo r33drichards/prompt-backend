@@ -367,23 +367,11 @@ The application includes an Apalis-based background job processing system with t
 1. **outbox-publisher**: Reads from PostgreSQL outbox table and publishes to Redis
 2. **session-handler**: Reads from Redis and processes session data
 
-### Running Background Tasks
+### Running the Application
 
 ```bash
-# Run web server only
+# Run web server and all background tasks
 cargo run -- --server
-
-# Run all background tasks only
-cargo run -- --bg-tasks -A
-
-# Run specific background tasks only
-cargo run -- --bg-tasks outbox-publisher session-handler
-
-# Run web server AND background tasks together
-cargo run -- --server --bg-tasks session-handler
-
-# Run web server AND all background tasks
-cargo run -- --server --bg-tasks -A
 
 # Print OpenAPI specification
 cargo run -- print-openapi
@@ -391,15 +379,10 @@ cargo run -- print-openapi
 
 ### CLI Options
 
-The CLI uses independent flags - specify which services to run:
-
-- `--server`: Run the web server
-- `--bg-tasks <TASKS>`: Run background tasks
-  - `-A` or `--all`: Run all available tasks
-  - Or specify task names: `outbox-publisher session-handler`
+- `--server`: Run the web server and all background tasks
 - `print-openapi`: Print OpenAPI specification and exit
 
-**Note**: You must specify at least one service (`--server` and/or `--bg-tasks`). The flags are independent and can be combined.
+**Note**: The `--server` flag starts both the web server and all background tasks (outbox-publisher, ip-return-poller, prompt-poller) together.
 
 ### Task Implementations
 

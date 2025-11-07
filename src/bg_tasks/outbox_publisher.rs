@@ -7,7 +7,7 @@ use sandbox_client::types::ShellExecRequest;
 
 use crate::entities::message;
 use crate::entities::prompt::Entity as Prompt;
-use crate::entities::session::Entity as Session;
+use crate::entities::session::{Entity as Session, SessionStatus};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,7 +20,7 @@ impl Job for OutboxJob {
     const NAME: &'static str = "OutboxJob";
 }
 
-/// Context for the outbox publisher containing database and Redis connections
+/// Context for the outbox publisher containing database connection
 #[derive(Clone)]
 pub struct OutboxContext {
     pub db: DatabaseConnection,
@@ -221,11 +221,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     // Fire-and-forget task to run Claude Code CLI
     let session_id = _session_model.id;
     let prompt_id_clone = prompt_id;
-    let borrowed_ip_item = borrowed_ip_json.clone();
-    let ip_allocator_url =
-        std::env::var("IP_ALLOCATOR_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
-    let ip_allocator_url_clone = ip_allocator_url.clone();
     let db_clone = ctx.db.clone();
+    let db_clone_for_return = ctx.db.clone();
     let prompt_content_clone = prompt_content.clone();
     let repo_clone = _session_model.repo.clone();
     let branch_clone = branch.clone();
@@ -433,16 +430,43 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         })
         .await;
 
-        // Return borrowed IP (always, even on failure)
-        info!("Returning borrowed IP for session {}", session_id);
-        let ip_client = ip_allocator_client::Client::new(&ip_allocator_url_clone);
-        let return_input = ip_allocator_client::types::ReturnInput {
-            item: borrowed_ip_item,
-        };
-        if let Err(e) = ip_client.handlers_ip_return_item(&return_input).await {
-            error!("Failed to return IP for session {}: {}", session_id, e);
-        } else {
-            info!("Successfully returned IP for session {}", session_id);
+        // Update session status to ReturningIp (poller will handle IP return)
+        info!("Updating session {} status to ReturningIp", session_id);
+
+        let session_result = Session::find_by_id(session_id)
+            .one(&db_clone_for_return)
+            .await;
+        match session_result {
+            Ok(Some(session_model)) => {
+                let mut active_session: crate::entities::session::ActiveModel =
+                    session_model.into();
+                active_session.session_status = Set(SessionStatus::ReturningIp);
+                active_session.status_message = Set(Some("Returning IP".to_string()));
+
+                if let Err(e) = active_session.update(&db_clone_for_return).await {
+                    error!(
+                        "Failed to update session {} status to ReturningIp: {}",
+                        session_id, e
+                    );
+                } else {
+                    info!(
+                        "Updated session {} status to ReturningIp - poller will handle IP return",
+                        session_id
+                    );
+                }
+            }
+            Ok(None) => {
+                error!(
+                    "Session {} not found when trying to update status",
+                    session_id
+                );
+            }
+            Err(e) => {
+                error!(
+                    "Failed to query session {} for status update: {}",
+                    session_id, e
+                );
+            }
         }
     });
 
