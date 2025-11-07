@@ -35,9 +35,13 @@ struct Cli {
     #[arg(long)]
     server: bool,
 
-    /// Enable background tasks. Use -A/--all to run all tasks, or specify task names
+    /// Enable specific background tasks by name
     #[arg(long = "bg-tasks", value_name = "TASKS")]
     bg_tasks: Vec<String>,
+
+    /// Run all available background tasks
+    #[arg(long)]
+    all_bg_tasks: bool,
 }
 
 #[derive(Subcommand, PartialEq)]
@@ -91,9 +95,7 @@ async fn main() -> anyhow::Result<()> {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     // Determine which background tasks to run (empty vec if none specified)
-    let bg_task_names: Vec<String> = if cli.bg_tasks.contains(&"-A".to_string())
-        || cli.bg_tasks.contains(&"--all".to_string())
-    {
+    let bg_task_names: Vec<String> = if cli.all_bg_tasks {
         bg_tasks::all_tasks()
             .into_iter()
             .map(|s| s.to_string())

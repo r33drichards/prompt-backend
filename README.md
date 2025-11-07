@@ -374,16 +374,19 @@ The application includes an Apalis-based background job processing system with t
 cargo run -- --server
 
 # Run all background tasks only
-cargo run -- --bg-tasks -A
+cargo run -- --all-bg-tasks
 
 # Run specific background tasks only
-cargo run -- --bg-tasks outbox-publisher session-handler
+cargo run -- --bg-tasks outbox-publisher
 
-# Run web server AND background tasks together
-cargo run -- --server --bg-tasks session-handler
+# Run multiple specific background tasks
+cargo run -- --bg-tasks outbox-publisher ip-return-poller
+
+# Run web server AND specific background tasks together
+cargo run -- --server --bg-tasks outbox-publisher
 
 # Run web server AND all background tasks
-cargo run -- --server --bg-tasks -A
+cargo run -- --server --all-bg-tasks
 
 # Print OpenAPI specification
 cargo run -- print-openapi
@@ -394,9 +397,9 @@ cargo run -- print-openapi
 The CLI uses independent flags - specify which services to run:
 
 - `--server`: Run the web server
-- `--bg-tasks <TASKS>`: Run background tasks
-  - `-A` or `--all`: Run all available tasks
-  - Or specify task names: `outbox-publisher session-handler`
+- `--bg-tasks <TASKS>`: Run specific background tasks by name
+  - Specify one or more task names: `outbox-publisher ip-return-poller`
+- `--all-bg-tasks`: Run all available background tasks
 - `print-openapi`: Print OpenAPI specification and exit
 
 **Note**: You must specify at least one service (`--server` and/or `--bg-tasks`). The flags are independent and can be combined.

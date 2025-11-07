@@ -15,13 +15,16 @@ This is a Rust web service built with Rocket, providing a session management API
 cargo run -- --server
 
 # Run all background tasks
-cargo run -- --bg-tasks -A
+cargo run -- --all-bg-tasks
 
 # Run specific background tasks
 cargo run -- --bg-tasks outbox-publisher
 
+# Run multiple specific background tasks
+cargo run -- --bg-tasks outbox-publisher ip-return-poller
+
 # Run both web server and all background tasks
-cargo run -- --server --bg-tasks -A
+cargo run -- --server --all-bg-tasks
 
 # Print OpenAPI specification
 cargo run -- print-openapi
