@@ -79,9 +79,13 @@ async fn poll_and_enqueue_prompts(
             prompt.session_id, borrowed_ip.item
         );
 
-        // Update session's sbx_config with the borrowed IP data
+        // Update session's sbx_config with the borrowed IP data (including borrow_token)
         let mut active_session: session::ActiveModel = session_model.into();
-        active_session.sbx_config = Set(Some(borrowed_ip.item.clone()));
+        let sbx_config_data = serde_json::json!({
+            "item": borrowed_ip.item,
+            "borrow_token": borrowed_ip.borrow_token,
+        });
+        active_session.sbx_config = Set(Some(sbx_config_data));
         active_session.status_message = Set(Some("Found Sandbox".to_string()));
         active_session.update(db).await?;
 

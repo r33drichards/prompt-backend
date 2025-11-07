@@ -1831,9 +1831,9 @@ dependencies = [
 
 [[package]]
 name = "ip-allocator-client"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed5c2af4ffb220b002431c3e5be7b39dffce93f8bce96f421268c1d3d5393b66"
+checksum = "a963a567869fb077db848611bc4690ffe3084e31894da33b929587890a776db7"
 dependencies = [
  "futures",
  "prettyplease",
