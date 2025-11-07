@@ -2,7 +2,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, Qu
 use std::time::Duration;
 use tracing::{error, info, warn};
 
-use crate::entities::session::{self, Entity as Session, SessionStatus};
+use crate::entities::session::{self, Entity as Session, SessionStatus, UiStatus};
 use crate::services::dead_letter_queue::{exists_in_dlq, insert_dlq_entry, MAX_RETRY_COUNT};
 
 /// Periodic poller that checks for sessions in ReturningIp status every 5 seconds
@@ -108,6 +108,7 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
                 active_session.sbx_config = Set(None);
                 active_session.session_status = Set(SessionStatus::Archived);
                 active_session.status_message = Set(Some("IP returned successfully".to_string()));
+                active_session.ui_status = Set(UiStatus::Archived);
                 active_session.ip_return_retry_count = Set(0);
 
                 if let Err(e) = active_session.update(db).await {
@@ -210,6 +211,7 @@ async fn archive_session(db: &DatabaseConnection, session: session::Model) -> an
     active_session.sbx_config = Set(None);
     active_session.session_status = Set(SessionStatus::Archived);
     active_session.status_message = Set(Some("Archived (no IP to return)".to_string()));
+    active_session.ui_status = Set(UiStatus::Archived);
 
     active_session.update(db).await?;
     info!("Archived session {} without IP return", session_id);

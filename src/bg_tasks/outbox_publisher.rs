@@ -7,7 +7,7 @@ use sandbox_client::types::ShellExecRequest;
 
 use crate::entities::message;
 use crate::entities::prompt::Entity as Prompt;
-use crate::entities::session::{Entity as Session, SessionStatus};
+use crate::entities::session::{Entity as Session, SessionStatus, UiStatus};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -447,6 +447,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     session_model.into();
                 active_session.session_status = Set(SessionStatus::ReturningIp);
                 active_session.status_message = Set(Some("Returning IP".to_string()));
+                active_session.ui_status = Set(UiStatus::NeedsReview);
 
                 if let Err(e) = active_session.update(&db_clone_for_return).await {
                     error!(

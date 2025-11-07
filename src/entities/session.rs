@@ -22,6 +22,7 @@ pub struct Model {
     pub session_status: SessionStatus,
     #[sea_orm(nullable)]
     pub status_message: Option<String>,
+    pub ui_status: UiStatus,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
     #[sea_orm(nullable)]
@@ -57,4 +58,19 @@ pub enum SessionStatus {
     Archived,
     #[sea_orm(string_value = "returning_ip")]
     ReturningIp,
+}
+
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema,
+)]
+#[sea_orm(rs_type = "String", db_type = "String(Some(50))")]
+pub enum UiStatus {
+    #[sea_orm(string_value = "pending")]
+    Pending,
+    #[sea_orm(string_value = "in_progress")]
+    InProgress,
+    #[sea_orm(string_value = "needs_review")]
+    NeedsReview,
+    #[sea_orm(string_value = "archived")]
+    Archived,
 }

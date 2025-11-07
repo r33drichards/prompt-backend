@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthenticatedUser;
 use crate::entities::prompt::{self, Entity as Prompt, InboxStatus, Model as PromptModel};
-use crate::entities::session::{self, Entity as Session};
+use crate::entities::session::{self, Entity as Session, UiStatus};
 use crate::error::{Error, OResult};
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -89,12 +89,22 @@ pub async fn create(
         .map_err(|_| Error::bad_request("Invalid session_id UUID format".to_string()))?;
 
     // Verify session exists and belongs to user
-    let _session = Session::find_by_id(session_id)
+    let session = Session::find_by_id(session_id)
         .filter(session::Column::UserId.eq(&user.user_id))
         .one(db.inner())
         .await
         .map_err(|e| Error::database_error(e.to_string()))?
         .ok_or_else(|| Error::not_found("Session not found".to_string()))?;
+
+    // If session is in NeedsReview state, transition to Pending when adding new prompt
+    if session.ui_status == UiStatus::NeedsReview {
+        let mut active_session: session::ActiveModel = session.into();
+        active_session.ui_status = Set(UiStatus::Pending);
+        active_session
+            .update(db.inner())
+            .await
+            .map_err(|e| Error::database_error(e.to_string()))?;
+    }
 
     let id = Uuid::new_v4();
 
