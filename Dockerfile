@@ -14,4 +14,4 @@ COPY --from=builder /usr/src/app/target/release/rust-redis-webserver /usr/local/
 
 EXPOSE 8000
 
-CMD ["rust-redis-webserver", "--server", "--bg-tasks", "-A"]
+CMD ["rust-redis-webserver", "--server"]
