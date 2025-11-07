@@ -20,6 +20,8 @@ pub struct Model {
     #[sea_orm(nullable)]
     pub title: Option<String>,
     pub session_status: SessionStatus,
+    #[sea_orm(nullable)]
+    pub status_message: Option<String>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
     #[sea_orm(nullable)]
