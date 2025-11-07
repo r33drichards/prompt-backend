@@ -145,6 +145,19 @@ async fn main() -> anyhow::Result<()> {
         });
 
         handles.push(poller_handle);
+
+        // Spawn IP return poller
+        let ip_return_database_url = database_url.clone();
+        let ip_return_handle = tokio::spawn(async move {
+            info!("Starting IP return poller");
+
+            // Create SeaORM database connection for the poller
+            let db = establish_connection(&ip_return_database_url).await?;
+
+            bg_tasks::ip_return_poller::run_ip_return_poller(db).await
+        });
+
+        handles.push(ip_return_handle);
     }
 
     // If no services specified, error out

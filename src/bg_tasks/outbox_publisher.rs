@@ -1,5 +1,4 @@
 use apalis::prelude::*;
-use apalis_sql::postgres::{PgPool, PostgresStorage};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, NotSet, Set};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
@@ -9,8 +8,6 @@ use sandbox_client::types::ShellExecRequest;
 use crate::entities::message;
 use crate::entities::prompt::Entity as Prompt;
 use crate::entities::session::{Entity as Session, SessionStatus};
-
-use super::ip_returner::IpReturnJob;
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,11 +20,10 @@ impl Job for OutboxJob {
     const NAME: &'static str = "OutboxJob";
 }
 
-/// Context for the outbox publisher containing database and PostgreSQL pool for job enqueueing
+/// Context for the outbox publisher containing database connection
 #[derive(Clone)]
 pub struct OutboxContext {
     pub db: DatabaseConnection,
-    pub pool: PgPool,
 }
 
 /// Process an outbox job: read prompt by ID, get related session, set up sandbox, and run Claude Code
@@ -227,7 +223,6 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let prompt_id_clone = prompt_id;
     let db_clone = ctx.db.clone();
     let db_clone_for_return = ctx.db.clone();
-    let pool_clone = ctx.pool.clone();
     let prompt_content_clone = prompt_content.clone();
     let repo_clone = _session_model.repo.clone();
     let branch_clone = branch.clone();
@@ -435,11 +430,12 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         })
         .await;
 
-        // Update session status to ReturningIp and enqueue IP return job
-        info!("Enqueuing IP return job for session {}", session_id);
+        // Update session status to ReturningIp (poller will handle IP return)
+        info!("Updating session {} status to ReturningIp", session_id);
 
-        // Update session status to ReturningIp
-        let session_result = Session::find_by_id(session_id).one(&db_clone_for_return).await;
+        let session_result = Session::find_by_id(session_id)
+            .one(&db_clone_for_return)
+            .await;
         match session_result {
             Ok(Some(session_model)) => {
                 let mut active_session: crate::entities::session::ActiveModel =
@@ -453,39 +449,21 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                         session_id, e
                     );
                 } else {
-                    info!("Updated session {} status to ReturningIp", session_id);
-
-                    // Enqueue IP return job
-                    let mut storage = PostgresStorage::new(pool_clone);
-                    let ip_return_job = IpReturnJob {
-                        session_id: session_id.to_string(),
-                    };
-
-                    match storage.push(ip_return_job).await {
-                        Ok(_) => {
-                            info!(
-                                "Successfully enqueued IP return job for session {}",
-                                session_id
-                            );
-                        }
-                        Err(e) => {
-                            error!(
-                                "Failed to enqueue IP return job for session {}: {}",
-                                session_id, e
-                            );
-                        }
-                    }
+                    info!(
+                        "Updated session {} status to ReturningIp - poller will handle IP return",
+                        session_id
+                    );
                 }
             }
             Ok(None) => {
                 error!(
-                    "Session {} not found when trying to enqueue IP return",
+                    "Session {} not found when trying to update status",
                     session_id
                 );
             }
             Err(e) => {
                 error!(
-                    "Failed to query session {} for IP return: {}",
+                    "Failed to query session {} for status update: {}",
                     session_id, e
                 );
             }
