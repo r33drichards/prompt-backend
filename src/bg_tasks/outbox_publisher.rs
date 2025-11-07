@@ -230,6 +230,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let db_clone_for_return = ctx.db.clone();
     let prompt_content_clone = prompt_content.clone();
     let repo_clone = _session_model.repo.clone();
+    let target_branch_clone = _session_model.target_branch.clone();
     let branch_clone = branch.clone();
     let repo_path_clone = repo_path.clone();
 
@@ -298,7 +299,13 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     .clone()
                     .unwrap_or_else(|| "unknown/repo".to_string()),
             )
-            .replace("{BRANCH}", &branch_clone);
+            .replace("{BRANCH}", &branch_clone)
+            .replace(
+                "{TARGET_BRANCH}",
+                &target_branch_clone
+                    .clone()
+                    .unwrap_or_else(|| "main".to_string()),
+            );
 
         // Spawn the Claude CLI process with piped stdout/stderr for streaming
         let _ = tokio::task::spawn_blocking(move || {
