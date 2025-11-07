@@ -3299,6 +3299,7 @@ dependencies = [
  "apalis-redis",
  "apalis-sql",
  "base64ct",
+ "chrono",
  "clap",
  "dotenv",
  "home",
