@@ -105,8 +105,9 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
                 // Users should manually archive sessions when they're done
                 let mut active_session: session::ActiveModel = session.into();
                 active_session.sbx_config = Set(None);
-                active_session.session_status = Set(SessionStatus::Pending);
-                active_session.status_message = Set(Some("Prompt completed, IP returned".to_string()));
+                active_session.session_status = Set(SessionStatus::Active);
+                active_session.status_message =
+                    Set(Some("Prompt completed, IP returned".to_string()));
                 active_session.ip_return_retry_count = Set(0);
 
                 if let Err(e) = active_session.update(db).await {

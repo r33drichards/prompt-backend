@@ -14,7 +14,7 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(Session::UserId)
                             .string()
                             .not_null()
-                            .default("")
+                            .default(""),
                     )
                     .to_owned(),
             )

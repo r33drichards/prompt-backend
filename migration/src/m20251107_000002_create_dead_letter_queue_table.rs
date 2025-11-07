@@ -22,11 +22,7 @@ impl MigrationTrait for Migration {
                             .string()
                             .not_null(),
                     )
-                    .col(
-                        ColumnDef::new(DeadLetterQueue::EntityId)
-                            .uuid()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(DeadLetterQueue::EntityId).uuid().not_null())
                     .col(
                         ColumnDef::new(DeadLetterQueue::EntityData)
                             .json_binary()
@@ -38,11 +34,7 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .default(0),
                     )
-                    .col(
-                        ColumnDef::new(DeadLetterQueue::LastError)
-                            .text()
-                            .not_null(),
-                    )
+                    .col(ColumnDef::new(DeadLetterQueue::LastError).text().not_null())
                     .col(
                         ColumnDef::new(DeadLetterQueue::LastErrorAt)
                             .timestamp_with_time_zone()
