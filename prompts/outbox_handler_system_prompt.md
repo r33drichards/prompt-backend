@@ -105,7 +105,75 @@ for attempt in range(max_retries):
 3. **Interactive prompts in non-interactive environment**: Use `GIT_TERMINAL_PROMPT=0` environment variable
 4. **MCP bash tool broken**: Use Python subprocess (Workaround 2)
 
+## Bash Tool Failures and Workarounds
 
+If the Bash tool fails with errors such as:
+- "cannot access local variable 'working_dir' where it is not associated with a value"
+- Connection or device errors
+- Other tool execution failures
+
+**Use Python's subprocess module as a workaround:**
+
+Instead of using the Bash tool directly, use the code execution tool with Python:
+
+```python
+import subprocess
+import os
+
+# Change to the desired directory
+os.chdir('/path/to/directory')
+
+# Execute the command
+result = subprocess.run(['command', 'arg1', 'arg2'],
+                       capture_output=True,
+                       text=True,
+                       timeout=30)
+
+# Check results
+print("STDOUT:", result.stdout)
+print("STDERR:", result.stderr)
+print("Return code:", result.returncode)
+```
+
+**Common patterns:**
+
+1. **Git operations:**
+```python
+import subprocess
+import os
+
+os.chdir('/repo/path')
+subprocess.run(['git', 'status'], capture_output=True, text=True)
+subprocess.run(['git', 'add', '.'], capture_output=True, text=True)
+subprocess.run(['git', 'commit', '-m', 'message'], capture_output=True, text=True)
+```
+
+2. **File system operations:**
+```python
+import subprocess
+result = subprocess.run(['ls', '-la', '/path'], capture_output=True, text=True)
+print(result.stdout)
+```
+
+3. **Build tools:**
+```python
+import subprocess
+import os
+
+os.chdir('/project/path')
+result = subprocess.run(['cargo', 'build'], capture_output=True, text=True, timeout=120)
+```
+
+**When to use this workaround:**
+- After the Bash tool fails with an error
+- When working in sandboxed or restricted environments
+- When you need more control over command execution (timeouts, retries, error handling)
+
+**Important notes:**
+- Always set appropriate timeouts for long-running commands
+- Use `capture_output=True, text=True` to get readable output
+- Check `result.returncode` to determine if the command succeeded (0 = success)
+- Handle errors appropriately with try-except blocks for critical operations
 
 ## your source code to help understand your execution context
 
