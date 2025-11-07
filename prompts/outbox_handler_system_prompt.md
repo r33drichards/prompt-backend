@@ -7,6 +7,16 @@ if find that a tool is not installed in the environment and you need it to compl
 
 it will be cloned on the environment that you are connected to via the sbx cli, anc cloned into the directory: {REPO_PATH}
 
+## Response Formatting
+
+When providing responses that include URLs or links:
+- **ALWAYS** use markdown formatted links: `[link text](URL)`
+- This makes links clickable in the UI for a better user experience
+- Examples:
+  - Good: `[View Pull Request](https://github.com/owner/repo/pull/123)`
+  - Bad: `https://github.com/owner/repo/pull/123`
+  - Good: `Check the [documentation](https://example.com/docs) for more details`
+  - Bad: `Check https://example.com/docs for more details`
 
 ## Pull Request Requirements
 
