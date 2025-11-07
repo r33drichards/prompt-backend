@@ -101,16 +101,21 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     info!("Using pre-allocated sandbox from session sbx_config");
 
     // Parse the sbx_config JSON to extract mcp_json_string and api_url
-    let mcp_json_string = borrowed_ip_json["mcp_json_string"]
+    // Note: The data is nested under "item" key from prompt_poller
+    let item = borrowed_ip_json["item"]
+        .as_object()
+        .ok_or_else(|| Error::Failed("Missing item object in sbx_config".into()))?;
+
+    let mcp_json_string = item["mcp_json_string"]
         .as_str()
-        .ok_or_else(|| Error::Failed("Missing mcp_json_string in sbx_config".into()))?
+        .ok_or_else(|| Error::Failed("Missing mcp_json_string in sbx_config.item".into()))?
         .to_string();
 
     info!("Sandbox mcp_json_string: {}", mcp_json_string);
 
-    let api_url = borrowed_ip_json["api_url"]
+    let api_url = item["api_url"]
         .as_str()
-        .ok_or_else(|| Error::Failed("Missing api_url in sbx_config".into()))?;
+        .ok_or_else(|| Error::Failed("Missing api_url in sbx_config.item".into()))?;
 
     info!("Sandbox api_url: {}", api_url);
 
