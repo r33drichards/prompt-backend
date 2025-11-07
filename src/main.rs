@@ -64,6 +64,10 @@ fn generate_openapi_spec() -> String {
         handlers::messages::update,
         handlers::messages::delete,
         handlers::webhooks::return_item,
+        handlers::dead_letter_queue::list_dlq_entries,
+        handlers::dead_letter_queue::get_dlq_entry,
+        handlers::dead_letter_queue::resolve_dlq,
+        handlers::dead_letter_queue::abandon_dlq,
     ](&settings);
     serde_json::to_string_pretty(&spec).unwrap()
 }
@@ -240,6 +244,10 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
                 handlers::messages::update,
                 handlers::messages::delete,
                 handlers::webhooks::return_item,
+                handlers::dead_letter_queue::list_dlq_entries,
+                handlers::dead_letter_queue::get_dlq_entry,
+                handlers::dead_letter_queue::resolve_dlq,
+                handlers::dead_letter_queue::abandon_dlq,
             ],
         )
         .mount("/", routes![handlers::metrics::metrics])

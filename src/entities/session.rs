@@ -28,6 +28,8 @@ pub struct Model {
     pub deleted_at: Option<DateTimeWithTimeZone>,
     #[sea_orm(column_name = "user_id")]
     pub user_id: String,
+    #[sea_orm(default_value = 0)]
+    pub ip_return_retry_count: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

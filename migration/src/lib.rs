@@ -12,6 +12,8 @@ mod m20251106_000003_drop_messages_from_session;
 mod m20251106_000004_add_inbox_status_to_prompt;
 mod m20251106_000005_drop_inbox_status_from_session;
 mod m20251107_000001_add_status_message_to_session;
+mod m20251107_000002_create_dead_letter_queue_table;
+mod m20251107_000003_add_ip_return_retry_count_to_session;
 
 pub struct Migrator;
 
@@ -31,6 +33,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20251106_000004_add_inbox_status_to_prompt::Migration),
             Box::new(m20251106_000005_drop_inbox_status_from_session::Migration),
             Box::new(m20251107_000001_add_status_message_to_session::Migration),
+            Box::new(m20251107_000002_create_dead_letter_queue_table::Migration),
+            Box::new(m20251107_000003_add_ip_return_retry_count_to_session::Migration),
         ]
     }
 }

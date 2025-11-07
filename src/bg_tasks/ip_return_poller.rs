@@ -3,6 +3,7 @@ use std::time::Duration;
 use tracing::{error, info, warn};
 
 use crate::entities::session::{self, Entity as Session, SessionStatus};
+use crate::services::dead_letter_queue::{exists_in_dlq, insert_dlq_entry, MAX_RETRY_COUNT};
 
 /// Periodic poller that checks for sessions in ReturningIp status every 5 seconds
 /// and returns their IPs to the allocator
@@ -44,6 +45,25 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
     // Process each session
     for session in returning_sessions {
         let session_id = session.id;
+        let retry_count = session.ip_return_retry_count;
+
+        // Check if this session is already in the DLQ
+        match exists_in_dlq(db, "ip_return_poller", session_id).await {
+            Ok(true) => {
+                // Already in DLQ, skip processing
+                continue;
+            }
+            Ok(false) => {
+                // Not in DLQ, continue processing
+            }
+            Err(e) => {
+                error!(
+                    "Failed to check DLQ status for session {}: {}",
+                    session_id, e
+                );
+                continue;
+            }
+        }
 
         // Extract the borrowed IP and token from sbx_config
         let (item, borrow_token) = match &session.sbx_config {
@@ -70,7 +90,11 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
             }
         };
 
-        info!("Returning IP for session {}", session_id);
+        info!(
+            "Returning IP for session {} (attempt {})",
+            session_id,
+            retry_count + 1
+        );
 
         // Return the IP
         let return_input = ip_allocator_client::types::ReturnInput { item, borrow_token };
@@ -79,11 +103,12 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
             Ok(_) => {
                 info!("Successfully returned IP for session {}", session_id);
 
-                // Set sbx_config to null and update session status to Archived
+                // Set sbx_config to null, reset retry count, and update session status to Archived
                 let mut active_session: session::ActiveModel = session.into();
                 active_session.sbx_config = Set(None);
                 active_session.session_status = Set(SessionStatus::Archived);
                 active_session.status_message = Set(Some("IP returned successfully".to_string()));
+                active_session.ip_return_retry_count = Set(0);
 
                 if let Err(e) = active_session.update(db).await {
                     error!(
@@ -99,8 +124,78 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
                 }
             }
             Err(e) => {
-                error!("Failed to return IP for session {}: {}", session_id, e);
-                // Will retry on next poll cycle
+                let error_msg = format!("{}", e);
+                error!(
+                    "Failed to return IP for session {}: {}",
+                    session_id, error_msg
+                );
+
+                // Increment retry count
+                let new_retry_count = retry_count + 1;
+
+                // Check if we've exceeded the max retry count
+                if new_retry_count >= MAX_RETRY_COUNT {
+                    warn!(
+                        "Session {} has exceeded max retry count ({}), moving to dead letter queue",
+                        session_id, MAX_RETRY_COUNT
+                    );
+
+                    // Insert into DLQ
+                    match insert_dlq_entry(
+                        db,
+                        "ip_return_poller",
+                        session_id,
+                        session.sbx_config.clone(),
+                        new_retry_count,
+                        &error_msg,
+                        session.updated_at,
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            info!(
+                                "Successfully added session {} to dead letter queue",
+                                session_id
+                            );
+
+                            // Update session to mark it as in DLQ
+                            let mut active_session: session::ActiveModel = session.into();
+                            active_session.status_message = Set(Some(format!(
+                                "Moved to dead letter queue after {} failed attempts",
+                                new_retry_count
+                            )));
+                            active_session.ip_return_retry_count = Set(new_retry_count);
+
+                            if let Err(e) = active_session.update(db).await {
+                                error!(
+                                    "Failed to update session {} after moving to DLQ: {}",
+                                    session_id, e
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to add session {} to dead letter queue: {}",
+                                session_id, e
+                            );
+                        }
+                    }
+                } else {
+                    // Increment retry count and continue
+                    let mut active_session: session::ActiveModel = session.into();
+                    active_session.ip_return_retry_count = Set(new_retry_count);
+                    active_session.status_message = Set(Some(format!(
+                        "IP return failed (attempt {}/{}): {}",
+                        new_retry_count, MAX_RETRY_COUNT, error_msg
+                    )));
+
+                    if let Err(e) = active_session.update(db).await {
+                        error!(
+                            "Failed to update retry count for session {}: {}",
+                            session_id, e
+                        );
+                    }
+                }
             }
         }
     }
