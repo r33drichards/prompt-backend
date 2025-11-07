@@ -53,4 +53,6 @@ pub enum SessionStatus {
     Active,
     #[sea_orm(string_value = "archived")]
     Archived,
+    #[sea_orm(string_value = "returning_ip")]
+    ReturningIp,
 }

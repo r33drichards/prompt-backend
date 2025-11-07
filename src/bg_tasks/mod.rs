@@ -1,3 +1,4 @@
+pub mod ip_returner;
 pub mod outbox_publisher;
 pub mod prompt_poller;
 
@@ -10,10 +11,11 @@ use tracing::info;
 
 /// Available background task names
 pub const OUTBOX_PUBLISHER: &str = "outbox-publisher";
+pub const IP_RETURNER: &str = "ip-returner";
 
 /// Get all available task names
 pub fn all_tasks() -> Vec<&'static str> {
-    vec![OUTBOX_PUBLISHER]
+    vec![OUTBOX_PUBLISHER, IP_RETURNER]
 }
 
 /// Context for running background tasks, holds optional connections to backends
@@ -112,11 +114,14 @@ impl TaskContext {
                     }
                 });
 
-                // Create OutboxContext with database connection
+                // Create OutboxContext with database connection and pool
                 let database_url = std::env::var("DATABASE_URL")
                     .map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
                 let db = crate::db::establish_connection(&database_url).await?;
-                let ctx = outbox_publisher::OutboxContext { db };
+                let ctx = outbox_publisher::OutboxContext {
+                    db,
+                    pool: pool.clone(),
+                };
 
                 let worker = WorkerBuilder::new(OUTBOX_PUBLISHER)
                     .layer(PrometheusLayer)
@@ -125,6 +130,46 @@ impl TaskContext {
                     .build_fn(outbox_publisher::process_outbox_job);
 
                 info!("Registering worker: {}", OUTBOX_PUBLISHER);
+                Ok(monitor.register(worker))
+            }
+            IP_RETURNER => {
+                let pool = self
+                    .db
+                    .as_ref()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("PostgreSQL connection required for {}", task_name)
+                    })?
+                    .clone();
+
+                // Setup storage
+                PostgresStorage::setup(&pool).await?;
+                let storage = PostgresStorage::new(pool.clone());
+
+                // Create listener for PostgreSQL notifications
+                let mut listener = PgListen::new(pool.clone()).await?;
+                listener.subscribe::<ip_returner::IpReturnJob>();
+
+                tokio::spawn(async move {
+                    info!("PgListen starting for IP returner...");
+                    match listener.listen().await {
+                        Ok(_) => info!("PgListen completed successfully"),
+                        Err(e) => tracing::error!("PgListen error: {}", e),
+                    }
+                });
+
+                // Create IpReturnContext with database connection
+                let database_url = std::env::var("DATABASE_URL")
+                    .map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
+                let db = crate::db::establish_connection(&database_url).await?;
+                let ctx = ip_returner::IpReturnContext { db };
+
+                let worker = WorkerBuilder::new(IP_RETURNER)
+                    .layer(PrometheusLayer)
+                    .data(ctx)
+                    .with_storage(storage)
+                    .build_fn(ip_returner::process_ip_return_job);
+
+                info!("Registering worker: {}", IP_RETURNER);
                 Ok(monitor.register(worker))
             }
             _ => Err(anyhow::anyhow!("Unknown task: {}", task_name)),
