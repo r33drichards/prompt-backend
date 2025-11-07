@@ -108,7 +108,7 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
                 active_session.sbx_config = Set(None);
                 active_session.session_status = Set(SessionStatus::Archived);
                 active_session.status_message = Set(Some("IP returned successfully".to_string()));
-                active_session.ui_status = Set(UiStatus::Archived);
+                active_session.ui_status = Set(UiStatus::NeedsReview);
                 active_session.ip_return_retry_count = Set(0);
 
                 if let Err(e) = active_session.update(db).await {
@@ -211,7 +211,7 @@ async fn archive_session(db: &DatabaseConnection, session: session::Model) -> an
     active_session.sbx_config = Set(None);
     active_session.session_status = Set(SessionStatus::Archived);
     active_session.status_message = Set(Some("Archived (no IP to return)".to_string()));
-    active_session.ui_status = Set(UiStatus::Archived);
+    active_session.ui_status = Set(UiStatus::NeedsReview);
 
     active_session.update(db).await?;
     info!("Archived session {} without IP return", session_id);
