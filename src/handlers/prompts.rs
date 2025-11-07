@@ -103,6 +103,10 @@ pub async fn create(
         session_id: Set(session_id),
         data: Set(input.data.clone()),
         inbox_status: Set(InboxStatus::Pending),
+        processing_attempts: Set(0),
+        last_error: Set(None),
+        last_attempt_at: Set(None),
+        completed_at: Set(None),
         created_at: NotSet,
         updated_at: NotSet,
     };

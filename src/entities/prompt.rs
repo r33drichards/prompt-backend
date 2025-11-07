@@ -13,6 +13,13 @@ pub struct Model {
     pub data: Json,
     #[sea_orm(column_name = "inbox_status")]
     pub inbox_status: InboxStatus,
+    pub processing_attempts: i32,
+    #[sea_orm(nullable)]
+    pub last_error: Option<String>,
+    #[sea_orm(nullable)]
+    pub last_attempt_at: Option<DateTimeWithTimeZone>,
+    #[sea_orm(nullable)]
+    pub completed_at: Option<DateTimeWithTimeZone>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }
@@ -28,6 +35,8 @@ pub enum InboxStatus {
     Active,
     #[sea_orm(string_value = "completed")]
     Completed,
+    #[sea_orm(string_value = "failed")]
+    Failed,
     #[sea_orm(string_value = "archived")]
     Archived,
 }
