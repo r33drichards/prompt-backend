@@ -1,13 +1,15 @@
 use apalis::prelude::*;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, NotSet, Set};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use std::time::Duration;
+use tracing::{error, info, warn};
 
 use sandbox_client::types::ShellExecRequest;
 
 use crate::entities::message;
-use crate::entities::prompt::Entity as Prompt;
+use crate::entities::prompt::{Entity as Prompt, InboxStatus};
 use crate::entities::session::{Entity as Session, SessionStatus};
+use crate::services::dead_letter_queue::{exists_in_dlq, insert_dlq_entry, MAX_RETRY_COUNT};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,8 +28,212 @@ pub struct OutboxContext {
     pub db: DatabaseConnection,
 }
 
-/// Process an outbox job: read prompt by ID, get related session, set up sandbox, and run Claude Code
+/// Error classification for retry logic
+#[derive(Debug, Clone)]
+enum ErrorType {
+    /// Transient errors that should be retried (network issues, timeouts, etc.)
+    Transient,
+    /// Permanent errors that should not be retried (validation errors, not found, etc.)
+    Permanent,
+}
+
+/// Classify an error to determine if it should be retried
+fn classify_error(error: &str) -> ErrorType {
+    let error_lower = error.to_lowercase();
+    
+    // Transient errors - should retry
+    if error_lower.contains("timeout")
+        || error_lower.contains("connection refused")
+        || error_lower.contains("connection reset")
+        || error_lower.contains("network")
+        || error_lower.contains("temporarily unavailable")
+        || error_lower.contains("503")
+        || error_lower.contains("502")
+        || error_lower.contains("504")
+        || error_lower.contains("ECONNRESET")
+        || error_lower.contains("ETIMEDOUT")
+    {
+        return ErrorType::Transient;
+    }
+    
+    // Permanent errors - don't retry
+    if error_lower.contains("not found")
+        || error_lower.contains("404")
+        || error_lower.contains("401")
+        || error_lower.contains("403")
+        || error_lower.contains("invalid")
+        || error_lower.contains("parse")
+        || error_lower.contains("missing")
+    {
+        return ErrorType::Permanent;
+    }
+    
+    // Default to transient for unknown errors (better to retry than fail permanently)
+    ErrorType::Transient
+}
+
+/// Execute a sandbox command with retry logic and timeout
+async fn exec_sandbox_command_with_retry(
+    sbx: &sandbox_client::Client,
+    request: &ShellExecRequest,
+    max_retries: u32,
+) -> Result<sandbox_client::types::ShellExecResponse, Box<dyn std::error::Error + Send + Sync>> {
+    let mut last_error = None;
+    
+    for attempt in 0..=max_retries {
+        if attempt > 0 {
+            let backoff_ms = 1000 * 2_u64.pow(attempt - 1).min(16); // Exponential backoff: 1s, 2s, 4s, 8s, 16s max
+            warn!(
+                "Retrying sandbox command (attempt {}/{}) after {}ms backoff",
+                attempt + 1,
+                max_retries + 1,
+                backoff_ms
+            );
+            tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+        }
+        
+        match sbx.exec_command_v1_shell_exec_post(request).await {
+            Ok(response) => {
+                info!("Sandbox command succeeded on attempt {}", attempt + 1);
+                return Ok(response);
+            }
+            Err(e) => {
+                let error_str = e.to_string();
+                warn!("Sandbox command failed on attempt {}: {}", attempt + 1, error_str);
+                
+                // Check if error is permanent
+                if let ErrorType::Permanent = classify_error(&error_str) {
+                    error!("Permanent error detected, stopping retries: {}", error_str);
+                    return Err(Box::new(e));
+                }
+                
+                last_error = Some(e);
+            }
+        }
+    }
+    
+    Err(Box::new(
+        last_error.unwrap_or_else(|| sandbox_client::Error::UnexpectedResponse("Max retries exceeded".to_string())),
+    ))
+}
+
+/// Update prompt inbox status
+async fn update_prompt_status(
+    db: &DatabaseConnection,
+    prompt_id: uuid::Uuid,
+    status: InboxStatus,
+) -> Result<(), sea_orm::DbErr> {
+    let prompt = Prompt::find_by_id(prompt_id)
+        .one(db)
+        .await?
+        .ok_or_else(|| sea_orm::DbErr::RecordNotFound(format!("Prompt {} not found", prompt_id)))?;
+    
+    let mut active_prompt: crate::entities::prompt::ActiveModel = prompt.into();
+    active_prompt.inbox_status = Set(status);
+    active_prompt.update(db).await?;
+    
+    Ok(())
+}
+
+/// Main fault-tolerant wrapper for process_outbox_job
+/// This wraps the actual processing logic with retry and DLQ handling
 pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Result<(), Error> {
+    let prompt_id = match uuid::Uuid::parse_str(&job.prompt_id) {
+        Ok(id) => id,
+        Err(e) => {
+            error!("Invalid prompt ID format: {}", e);
+            return Err(Error::Failed(Box::new(e)));
+        }
+    };
+    
+    // Check if this prompt is already in the DLQ
+    match exists_in_dlq(&ctx.db, "outbox_job", prompt_id).await {
+        Ok(true) => {
+            warn!("Prompt {} already in DLQ, skipping processing", prompt_id);
+            return Ok(());
+        }
+        Ok(false) => {
+            // Continue processing
+        }
+        Err(e) => {
+            error!("Failed to check DLQ status for prompt {}: {}", prompt_id, e);
+            // Continue anyway - better to potentially duplicate than skip
+        }
+    }
+    
+    // Try to process the job
+    let result = process_outbox_job_internal(job.clone(), ctx.clone()).await;
+    
+    match result {
+        Ok(_) => {
+            info!("Successfully processed outbox job for prompt {}", prompt_id);
+            
+            // Update prompt status to completed on success
+            if let Err(e) = update_prompt_status(&ctx.db, prompt_id, InboxStatus::Completed).await {
+                error!("Failed to update prompt {} status to completed: {}", prompt_id, e);
+                // Don't fail the job if status update fails
+            }
+            
+            Ok(())
+        }
+        Err(e) => {
+            let error_str = e.to_string();
+            error!("Error processing outbox job for prompt {}: {}", prompt_id, error_str);
+            
+            // Classify the error
+            match classify_error(&error_str) {
+                ErrorType::Transient => {
+                    warn!("Transient error detected for prompt {}, will retry", prompt_id);
+                    // Return error to trigger Apalis retry
+                    Err(e)
+                }
+                ErrorType::Permanent => {
+                    error!("Permanent error detected for prompt {}, moving to DLQ", prompt_id);
+                    
+                    // Try to get prompt data for DLQ
+                    let entity_data = match Prompt::find_by_id(prompt_id).one(&ctx.db).await {
+                        Ok(Some(prompt)) => Some(serde_json::json!({
+                            "prompt_id": prompt_id.to_string(),
+                            "session_id": prompt.session_id.to_string(),
+                            "data": prompt.data,
+                            "inbox_status": format!("{:?}", prompt.inbox_status),
+                        })),
+                        _ => None,
+                    };
+                    
+                    // Insert into DLQ
+                    let now = chrono::Utc::now().into();
+                    if let Err(dlq_err) = insert_dlq_entry(
+                        &ctx.db,
+                        "outbox_job",
+                        prompt_id,
+                        entity_data,
+                        0, // Will be incremented by Apalis
+                        &error_str,
+                        now,
+                    )
+                    .await
+                    {
+                        error!("Failed to insert prompt {} into DLQ: {}", prompt_id, dlq_err);
+                    } else {
+                        info!("Moved prompt {} to DLQ after permanent error", prompt_id);
+                    }
+                    
+                    // Update prompt status to archived
+                    if let Err(status_err) = update_prompt_status(&ctx.db, prompt_id, InboxStatus::Archived).await {
+                        error!("Failed to archive prompt {} after DLQ insertion: {}", prompt_id, status_err);
+                    }
+                    
+                    // Return Ok to prevent further retries since we've moved to DLQ
+                    Ok(())
+                }
+            }
+        }
+    }
+}
+
+/// Internal implementation of outbox job processing with detailed error handling
+async fn process_outbox_job_internal(job: OutboxJob, ctx: Data<OutboxContext>) -> Result<(), Error> {
     info!("Processing outbox job for prompt_id: {}", job.prompt_id);
 
     // Parse prompt ID from job
@@ -141,86 +347,109 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         _session_model.id
     );
 
-    // Pass the token to gh auth login via stdin
+    // Pass the token to gh auth login via stdin - with retry
     let auth_command = format!("echo '{}' | gh auth login --with-token", github_token);
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: auth_command,
-        async_mode: false,
-        id: None,
-        timeout: Some(30.0_f64),
-        exec_dir: Some(String::from("/home/gem")),
-    })
+    exec_sandbox_command_with_retry(
+        &sbx,
+        &ShellExecRequest {
+            command: auth_command,
+            async_mode: false,
+            id: None,
+            timeout: Some(30.0_f64),
+            exec_dir: Some(String::from("/home/gem")),
+        },
+        3, // Max 3 retries
+    )
     .await
     .map_err(|e| {
-        error!("Failed to authenticate with GitHub: {}", e);
-        Error::Failed(Box::new(e))
+        error!("Failed to authenticate with GitHub after retries: {}", e);
+        Error::Failed(e)
     })?;
-    // Pass the token to gh auth login via stdin
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: "gh auth setup-git".to_string(),
-        async_mode: false,
-        id: None,
-        timeout: Some(30.0_f64),
-        exec_dir: Some(String::from("/home/gem")),
-    })
+    
+    // Setup git authentication - with retry
+    exec_sandbox_command_with_retry(
+        &sbx,
+        &ShellExecRequest {
+            command: "gh auth setup-git".to_string(),
+            async_mode: false,
+            id: None,
+            timeout: Some(30.0_f64),
+            exec_dir: Some(String::from("/home/gem")),
+        },
+        3, // Max 3 retries
+    )
     .await
     .map_err(|e| {
-        error!("Failed to authenticate with GitHub: {}", e);
-        Error::Failed(Box::new(e))
+        error!("Failed to setup git authentication after retries: {}", e);
+        Error::Failed(e)
     })?;
-    // clone the repo using session_id as directory name
+    
+    // Clone the repo using session_id as directory name - with retry
     let repo_dir = format!("repo_{}", session_id);
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: format!(
-            "git clone https://github.com/{}.git {}",
-            _session_model.repo.clone().unwrap(),
-            repo_dir
-        ),
-        async_mode: false,
-        id: None,
-        timeout: Some(30.0_f64),
-        exec_dir: Some(String::from("/home/gem")),
-    })
+    exec_sandbox_command_with_retry(
+        &sbx,
+        &ShellExecRequest {
+            command: format!(
+                "git clone https://github.com/{}.git {}",
+                _session_model.repo.clone().unwrap(),
+                repo_dir
+            ),
+            async_mode: false,
+            id: None,
+            timeout: Some(60.0_f64), // Longer timeout for clone
+            exec_dir: Some(String::from("/home/gem")),
+        },
+        3, // Max 3 retries
+    )
     .await
     .map_err(|e| {
-        error!("Failed to execute command: {}", e);
-        Error::Failed(Box::new(e))
+        error!("Failed to clone repository after retries: {}", e);
+        Error::Failed(e)
     })?;
 
-    // checkout the target branch
+    // Checkout the target branch - with retry
     let repo_path = format!("/home/gem/{}", repo_dir);
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: format!(
-            "git checkout {}",
-            _session_model.target_branch.clone().unwrap()
-        ),
-        async_mode: false,
-        id: None,
-        timeout: Some(30.0_f64),
-        exec_dir: Some(repo_path.clone()),
-    })
+    exec_sandbox_command_with_retry(
+        &sbx,
+        &ShellExecRequest {
+            command: format!(
+                "git checkout {}",
+                _session_model.target_branch.clone().unwrap()
+            ),
+            async_mode: false,
+            id: None,
+            timeout: Some(30.0_f64),
+            exec_dir: Some(repo_path.clone()),
+        },
+        3, // Max 3 retries
+    )
     .await
     .map_err(|e| {
-        error!("Failed to execute command: {}", e);
-        Error::Failed(Box::new(e))
+        error!("Failed to checkout target branch after retries: {}", e);
+        Error::Failed(e)
     })?;
 
     let branch = _session_model
         .branch
         .clone()
         .unwrap_or_else(|| format!("claude/{}", _session_model.id));
-    // if branch exists, checkout the branch, else switch -c the branch
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: format!("git checkout {} || git switch -c {}", branch, branch),
-        async_mode: false,
-        id: None,
-        timeout: Some(30.0_f64),
-        exec_dir: Some(repo_path.clone()),
-    })
+    
+    // If branch exists, checkout the branch, else switch -c the branch - with retry
+    exec_sandbox_command_with_retry(
+        &sbx,
+        &ShellExecRequest {
+            command: format!("git checkout {} || git switch -c {}", branch, branch),
+            async_mode: false,
+            id: None,
+            timeout: Some(30.0_f64),
+            exec_dir: Some(repo_path.clone()),
+        },
+        3, // Max 3 retries
+    )
     .await
     .map_err(|e| {
-        error!("Failed to execute command: {}", e);
-        Error::Failed(Box::new(e))
+        error!("Failed to checkout/create working branch after retries: {}", e);
+        Error::Failed(e)
     })?;
 
     // Fire-and-forget task to run Claude Code CLI
