@@ -29,7 +29,7 @@ pub async fn insert_dlq_entry(
         entity_data: Set(entity_data),
         retry_count: Set(retry_count),
         last_error: Set(error.to_string()),
-        last_error_at: NotSet, // Use database default (current_timestamp)
+        last_error_at: Set(chrono::Utc::now().into()),
         first_failed_at: Set(first_failed_at),
         status: Set(DlqStatus::Pending),
         resolution_notes: Set(None),
