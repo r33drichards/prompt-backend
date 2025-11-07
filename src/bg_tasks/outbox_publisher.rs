@@ -3,10 +3,8 @@ use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, NotSet, Set};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use sandbox_client::types::ShellExecRequest;
-
 use crate::entities::message;
-use crate::entities::prompt::Entity as Prompt;
+use crate::entities::prompt::{Entity as Prompt, InboxStatus};
 use crate::entities::session::{Entity as Session, SessionStatus};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
@@ -24,6 +22,43 @@ impl Job for OutboxJob {
 #[derive(Clone)]
 pub struct OutboxContext {
     pub db: DatabaseConnection,
+}
+
+/// Helper function to execute shell commands with error handling
+async fn exec_command_safe(
+    sbx: &sandbox_client::Client,
+    command: String,
+    exec_dir: String,
+    timeout: f64,
+    description: &str,
+) -> Result<sandbox_client::types::ShellCommandResult, Error> {
+    info!("Executing command ({}): {}", description, command);
+
+    let result = sbx
+        .exec_command_v1_shell_exec_post(&sandbox_client::types::ShellExecRequest {
+            command,
+            async_mode: false,
+            id: None,
+            timeout: Some(timeout),
+            exec_dir: Some(exec_dir),
+        })
+        .await
+        .map_err(|e| {
+            error!("Failed to execute command ({}): {}", description, e);
+            // Network/connection errors should cause job retry
+            Error::Failed(Box::new(std::io::Error::other(format!(
+                "Command execution failed: {}",
+                e
+            ))))
+        })?;
+
+    // Extract the data from ResponseValue
+    result.data.clone().ok_or_else(|| {
+        Error::Failed(Box::new(std::io::Error::other(format!(
+            "Command {} returned no data",
+            description
+        ))))
+    })
 }
 
 /// Process an outbox job: read prompt by ID, get related session, set up sandbox, and run Claude Code
@@ -48,6 +83,25 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             error!("Prompt {} not found", prompt_id);
             Error::Failed("Prompt not found".into())
         })?;
+
+    // Check if already completed (idempotency)
+    if prompt_model.inbox_status == InboxStatus::Completed {
+        info!("Prompt {} already completed, skipping", prompt_id);
+        return Ok(());
+    }
+
+    // Update prompt status to Active to indicate processing started
+    let mut active_prompt: crate::entities::prompt::ActiveModel = prompt_model.clone().into();
+    active_prompt.inbox_status = Set(InboxStatus::Active);
+    active_prompt.update(&ctx.db).await.map_err(|e| {
+        error!(
+            "Failed to update prompt {} status to Active: {}",
+            prompt_id, e
+        );
+        Error::Failed(Box::new(e))
+    })?;
+
+    info!("Updated prompt {} status to Active", prompt_id);
 
     // Query the related session
     let session_id = prompt_model.session_id;
@@ -130,95 +184,159 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
     info!("Successfully read GitHub token from environment");
 
-    // Authenticate with GitHub using the fetched token
+    // Authenticate with GitHub using the fetched token (idempotent)
     info!(
         "Authenticating with GitHub for session {}",
         _session_model.id
     );
 
-    // Pass the token to gh auth login via stdin
-    let auth_command = format!("echo '{}' | gh auth login --with-token", github_token);
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: auth_command,
-        async_mode: false,
-        id: None,
-        timeout: Some(30.0_f64),
-        exec_dir: Some(String::from("/home/gem")),
-    })
-    .await
-    .map_err(|e| {
-        error!("Failed to authenticate with GitHub: {}", e);
-        Error::Failed(Box::new(e))
-    })?;
-    // Pass the token to gh auth login via stdin
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: "gh auth setup-git".to_string(),
-        async_mode: false,
-        id: None,
-        timeout: Some(30.0_f64),
-        exec_dir: Some(String::from("/home/gem")),
-    })
-    .await
-    .map_err(|e| {
-        error!("Failed to authenticate with GitHub: {}", e);
-        Error::Failed(Box::new(e))
-    })?;
-    // clone the repo using session_id as directory name
+    // Check if already authenticated (idempotency check)
+    let auth_status = sbx
+        .exec_command_v1_shell_exec_post(&sandbox_client::types::ShellExecRequest {
+            command: "gh auth status".to_string(),
+            async_mode: false,
+            id: None,
+            timeout: Some(10.0_f64),
+            exec_dir: Some(String::from("/home/gem")),
+        })
+        .await;
+
+    let needs_auth = match auth_status {
+        Ok(response) => {
+            // Check if the response indicates authentication is needed
+            // The data field contains the command result
+            if let Some(data) = &response.data {
+                let output = data.output.as_deref().unwrap_or("");
+                !output.contains("Logged in to github.com")
+            } else {
+                true // If no data, assume we need to authenticate
+            }
+        }
+        Err(_) => true, // If status check fails, assume we need to authenticate
+    };
+
+    if needs_auth {
+        info!("GitHub not authenticated, performing authentication");
+
+        // Pass the token to gh auth login via stdin
+        let auth_command = format!("echo '{}' | gh auth login --with-token", github_token);
+        exec_command_safe(
+            &sbx,
+            auth_command,
+            String::from("/home/gem"),
+            30.0,
+            "GitHub authentication",
+        )
+        .await?;
+
+        // Setup git to use gh authentication
+        exec_command_safe(
+            &sbx,
+            "gh auth setup-git".to_string(),
+            String::from("/home/gem"),
+            30.0,
+            "GitHub git setup",
+        )
+        .await?;
+
+        info!("GitHub authentication completed");
+    } else {
+        info!("GitHub already authenticated, skipping");
+    }
+    // Clone the repo using session_id as directory name (idempotent)
     let repo_dir = format!("repo_{}", session_id);
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: format!(
-            "git clone https://github.com/{}.git {}",
-            _session_model.repo.clone().unwrap(),
-            repo_dir
-        ),
-        async_mode: false,
-        id: None,
-        timeout: Some(30.0_f64),
-        exec_dir: Some(String::from("/home/gem")),
-    })
-    .await
-    .map_err(|e| {
-        error!("Failed to execute command: {}", e);
-        Error::Failed(Box::new(e))
-    })?;
-
-    // checkout the target branch
     let repo_path = format!("/home/gem/{}", repo_dir);
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: format!(
-            "git checkout {}",
-            _session_model.target_branch.clone().unwrap()
-        ),
-        async_mode: false,
-        id: None,
-        timeout: Some(30.0_f64),
-        exec_dir: Some(repo_path.clone()),
-    })
-    .await
-    .map_err(|e| {
-        error!("Failed to execute command: {}", e);
-        Error::Failed(Box::new(e))
-    })?;
 
+    // Check if repo directory already exists (idempotency check)
+    let dir_check = sbx
+        .exec_command_v1_shell_exec_post(&sandbox_client::types::ShellExecRequest {
+            command: format!("test -d {}", repo_dir),
+            async_mode: false,
+            id: None,
+            timeout: Some(5.0_f64),
+            exec_dir: Some(String::from("/home/gem")),
+        })
+        .await;
+
+    let repo_exists = dir_check
+        .ok()
+        .and_then(|r| r.data.clone())
+        .map(|data| data.exit_code.unwrap_or(1) == 0)
+        .unwrap_or(false);
+
+    if !repo_exists {
+        info!("Repository directory doesn't exist, cloning");
+
+        exec_command_safe(
+            &sbx,
+            format!(
+                "git clone https://github.com/{}.git {}",
+                _session_model.repo.clone().unwrap(),
+                repo_dir
+            ),
+            String::from("/home/gem"),
+            120.0, // Increased timeout for cloning
+            "Git clone",
+        )
+        .await?;
+
+        info!("Repository cloned successfully");
+    } else {
+        info!("Repository directory already exists, skipping clone");
+    }
+
+    // Checkout the target branch (idempotent)
+    let target_branch = _session_model.target_branch.clone().unwrap();
+
+    // Fetch latest changes to ensure we have the target branch
+    exec_command_safe(
+        &sbx,
+        "git fetch origin".to_string(),
+        repo_path.clone(),
+        60.0,
+        "Git fetch",
+    )
+    .await?;
+
+    // Checkout target branch (will work if already on it)
+    exec_command_safe(
+        &sbx,
+        format!("git checkout {}", target_branch),
+        repo_path.clone(),
+        30.0,
+        "Git checkout target branch",
+    )
+    .await?;
+
+    // Pull latest changes from target branch
+    exec_command_safe(
+        &sbx,
+        format!("git pull origin {}", target_branch),
+        repo_path.clone(),
+        60.0,
+        "Git pull",
+    )
+    .await?;
+
+    // Create or checkout the work branch (idempotent)
     let branch = _session_model
         .branch
         .clone()
         .unwrap_or_else(|| format!("claude/{}", _session_model.id));
-    // if branch exists, checkout the branch, else switch -c the branch
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: format!("git checkout {} || git switch -c {}", branch, branch),
-        async_mode: false,
-        id: None,
-        timeout: Some(30.0_f64),
-        exec_dir: Some(repo_path.clone()),
-    })
-    .await
-    .map_err(|e| {
-        error!("Failed to execute command: {}", e);
-        Error::Failed(Box::new(e))
-    })?;
 
-    // Fire-and-forget task to run Claude Code CLI
+    // Try to checkout existing branch, or create new one
+    exec_command_safe(
+        &sbx,
+        format!("git checkout {} || git switch -c {}", branch, branch),
+        repo_path.clone(),
+        30.0,
+        "Git checkout/create work branch",
+    )
+    .await?;
+
+    info!("Git repository setup completed");
+
+    // Run Claude Code CLI and wait for completion (fault-tolerant)
     let session_id = _session_model.id;
     let prompt_id_clone = prompt_id;
     let db_clone = ctx.db.clone();
@@ -228,7 +346,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let branch_clone = branch.clone();
     let repo_path_clone = repo_path.clone();
 
-    tokio::spawn(async move {
+    // Use JoinHandle to wait for task completion
+    let cli_task_handle = tokio::spawn(async move {
         info!("Running Claude Code CLI for session {}", session_id);
 
         // Create a temporary directory for this session using tempfile
@@ -250,7 +369,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                 "Failed to create base temp directory {}: {}",
                 temp_base_dir, e
             );
-            return;
+            return Err(format!(
+                "Failed to create base temp directory: {}",
+                e
+            ));
         }
 
         let temp_dir = match tempfile::Builder::new()
@@ -263,7 +385,10 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     "Failed to create temp directory for session {} in {}: {}",
                     session_id, temp_base_dir, e
                 );
-                return;
+                return Err(format!(
+                    "Failed to create temp directory: {}",
+                    e
+                ));
             }
         };
 
@@ -274,7 +399,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                 "Failed to write MCP config for session {}: {}",
                 session_id, e
             );
-            return;
+            return Err(format!("Failed to write MCP config: {}", e));
         }
 
         // Clone prompt_content for use in spawn_blocking
@@ -448,6 +573,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                         "Failed to update session {} status to ReturningIp: {}",
                         session_id, e
                     );
+                    return Err(format!("Failed to update session status: {}", e));
                 } else {
                     info!(
                         "Updated session {} status to ReturningIp - poller will handle IP return",
@@ -460,17 +586,71 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     "Session {} not found when trying to update status",
                     session_id
                 );
+                return Err("Session not found for status update".to_string());
             }
             Err(e) => {
                 error!(
                     "Failed to query session {} for status update: {}",
                     session_id, e
                 );
+                return Err(format!("Failed to query session: {}", e));
             }
         }
+
+        Ok(())
     });
 
-    info!("Completed outbox job for prompt_id: {}", job.prompt_id);
+    // Wait for the CLI task to complete and handle the result
+    let cli_result = cli_task_handle.await.map_err(|e| {
+        error!("Claude CLI task panicked for session {}: {}", session_id, e);
+        Error::Failed(Box::new(std::io::Error::other(format!(
+            "CLI task panicked: {}",
+            e
+        ))))
+    })?;
 
-    Ok(())
+    match cli_result {
+        Ok(_) => {
+            info!(
+                "Claude CLI completed successfully for session {}",
+                session_id
+            );
+
+            // Update prompt status to Completed
+            let prompt_model = Prompt::find_by_id(prompt_id)
+                .one(&ctx.db)
+                .await
+                .map_err(|e| {
+                    error!("Failed to query prompt {} for completion: {}", prompt_id, e);
+                    Error::Failed(Box::new(e))
+                })?
+                .ok_or_else(|| {
+                    error!("Prompt {} not found for completion", prompt_id);
+                    Error::Failed("Prompt not found".into())
+                })?;
+
+            let mut active_prompt: crate::entities::prompt::ActiveModel = prompt_model.into();
+            active_prompt.inbox_status = Set(InboxStatus::Completed);
+            active_prompt.update(&ctx.db).await.map_err(|e| {
+                error!(
+                    "Failed to update prompt {} status to Completed: {}",
+                    prompt_id, e
+                );
+                Error::Failed(Box::new(e))
+            })?;
+
+            info!("Updated prompt {} status to Completed", prompt_id);
+            info!("Completed outbox job for prompt_id: {}", job.prompt_id);
+
+            Ok(())
+        }
+        Err(task_error) => {
+            error!(
+                "Claude CLI task failed for session {}: {}",
+                session_id, task_error
+            );
+            // Return error so Apalis will retry
+            Err(Error::Failed(Box::new(std::io::Error::other(task_error))))
+        }
+    }
 }
