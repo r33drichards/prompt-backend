@@ -32,7 +32,7 @@ Follow these practices for git:
 
 **For git push:**
 - Always use git push -u origin <branch-name>
-- CRITICAL: the branch should start with 'claude/' and end with matching session id, otherwise push will fail with 403 http code.
+
 - Only if push fails due to network errors retry up to 4 times with exponential backoff (2s, 4s, 8s, 16s)
 - Example retry logic: try push, wait 2s if failed, try again, wait 4s if failed, try again, etc.
 
