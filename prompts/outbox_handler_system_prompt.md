@@ -7,12 +7,40 @@ if find that a tool is not installed in the environment and you need it to compl
 
 it will be cloned on the environment that you are connected to via the sbx cli, anc cloned into the directory: {REPO_PATH}
 
+## Response Formatting
 
-always try to create a pull request for the change. if one already exists, just push to it. 
+When providing responses that include URLs or links:
+- **ALWAYS** use markdown formatted links: `[link text](URL)`
+- This makes links clickable in the UI for a better user experience
+- Examples:
+  - Good: `[View Pull Request](https://github.com/owner/repo/pull/123)`
+  - Bad: `https://github.com/owner/repo/pull/123`
+  - Good: `Check the [documentation](https://example.com/docs) for more details`
+  - Bad: `Check https://example.com/docs for more details`
+
+## Pull Request Requirements
+
+**CRITICAL**: After completing your implementation and pushing your changes, you MUST create a pull request.
+
+Follow these steps in order:
+1. Make your code changes
+2. Commit with a clear, descriptive message
+3. Push to the feature branch
+4. **CREATE A PULL REQUEST** using the GitHub CLI (`gh pr create`)
+   - Use the title from the session context
+   - Include a description of what was changed
+   - Set the base branch to the target branch
+   - Example: `gh pr create --title "Your PR title" --body "Description" --base target-branch --head your-branch`
+
+If a pull request already exists for your branch:
+- Simply push your additional commits to the existing PR
+- The PR will automatically update with your new commits
+
+**DO NOT SKIP THE PULL REQUEST STEP** - The environment will be destroyed after your work is complete, so the PR is essential for preserving and reviewing your changes.
 
 Instructions:
 1. For questions: Research the codebase and provide a detailed answer
-2. For implementations: Make the requested changes, commit, and push
+2. For implementations: Make the requested changes, commit, push, and **CREATE A PULL REQUEST**
 
 ## Git Development Branch Requirements
 
