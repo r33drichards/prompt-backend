@@ -26,22 +26,14 @@ mod services;
 /// CLI application for the prompt backend server
 #[derive(Parser)]
 #[command(name = "prompt-backend")]
-#[command(about = "A Rocket web server with Redis and PostgreSQL support", long_about = None)]
+#[command(about = "A Rocket web server with Redis and PostgreSQL support (background tasks always run)", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Run the web server
+    /// Run the web server (background tasks always run)
     #[arg(long)]
     server: bool,
-
-    /// Enable specific background tasks by name
-    #[arg(long = "bg-tasks", value_name = "TASKS")]
-    bg_tasks: Vec<String>,
-
-    /// Run all available background tasks
-    #[arg(long)]
-    all_bg_tasks: bool,
 }
 
 #[derive(Subcommand, PartialEq)]
@@ -94,16 +86,6 @@ async fn main() -> anyhow::Result<()> {
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    // Determine which background tasks to run (empty vec if none specified)
-    let bg_task_names: Vec<String> = if cli.all_bg_tasks {
-        bg_tasks::all_tasks()
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect()
-    } else {
-        cli.bg_tasks
-    };
-
     let mut handles = vec![];
 
     // Spawn server if --server flag is present
@@ -119,54 +101,51 @@ async fn main() -> anyhow::Result<()> {
         handles.push(server_handle);
     }
 
-    // Spawn background tasks if --bg-tasks flag is present
-    if !bg_task_names.is_empty() {
-        let task_database_url = Some(database_url.clone());
-        let bg_tasks_handle = tokio::spawn(async move {
-            info!("Starting background tasks");
-            let task_context = bg_tasks::TaskContext::new(task_database_url)
-                .await
-                .expect("Failed to create task context");
-            task_context.run_bg_tasks(bg_task_names).await
-        });
+    // Always spawn all background tasks
+    let bg_task_names: Vec<String> = bg_tasks::all_tasks()
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
 
-        handles.push(bg_tasks_handle);
+    let task_database_url = Some(database_url.clone());
+    let bg_tasks_handle = tokio::spawn(async move {
+        info!("Starting background tasks");
+        let task_context = bg_tasks::TaskContext::new(task_database_url)
+            .await
+            .expect("Failed to create task context");
+        task_context.run_bg_tasks(bg_task_names).await
+    });
 
-        // Spawn prompt poller if outbox-publisher is enabled
-        let poller_database_url = database_url.clone();
-        let poller_handle = tokio::spawn(async move {
-            info!("Starting prompt poller");
+    handles.push(bg_tasks_handle);
 
-            // Create SeaORM database connection for the poller
-            let db = establish_connection(&poller_database_url).await?;
+    // Spawn prompt poller
+    let poller_database_url = database_url.clone();
+    let poller_handle = tokio::spawn(async move {
+        info!("Starting prompt poller");
 
-            // Create PostgreSQL pool for apalis storage
-            let pool = apalis_sql::postgres::PgPool::connect(&poller_database_url).await?;
+        // Create SeaORM database connection for the poller
+        let db = establish_connection(&poller_database_url).await?;
 
-            bg_tasks::prompt_poller::run_prompt_poller(db, pool).await
-        });
+        // Create PostgreSQL pool for apalis storage
+        let pool = apalis_sql::postgres::PgPool::connect(&poller_database_url).await?;
 
-        handles.push(poller_handle);
+        bg_tasks::prompt_poller::run_prompt_poller(db, pool).await
+    });
 
-        // Spawn IP return poller
-        let ip_return_database_url = database_url.clone();
-        let ip_return_handle = tokio::spawn(async move {
-            info!("Starting IP return poller");
+    handles.push(poller_handle);
 
-            // Create SeaORM database connection for the poller
-            let db = establish_connection(&ip_return_database_url).await?;
+    // Spawn IP return poller
+    let ip_return_database_url = database_url.clone();
+    let ip_return_handle = tokio::spawn(async move {
+        info!("Starting IP return poller");
 
-            bg_tasks::ip_return_poller::run_ip_return_poller(db).await
-        });
+        // Create SeaORM database connection for the poller
+        let db = establish_connection(&ip_return_database_url).await?;
 
-        handles.push(ip_return_handle);
-    }
+        bg_tasks::ip_return_poller::run_ip_return_poller(db).await
+    });
 
-    // If no services specified, error out
-    if handles.is_empty() {
-        eprintln!("No services specified. Use --server and/or --bg-tasks, or --help for usage.");
-        return Err(anyhow::anyhow!("No services specified"));
-    }
+    handles.push(ip_return_handle);
 
     // Wait for all services to complete
     for handle in handles {

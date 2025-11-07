@@ -84,7 +84,7 @@ services:
   webserver:
     image: rust-redis-webserver:latest
     container_name: prompt-backend-webserver
-    command: ["rust-redis-webserver", "--server", "--all-bg-tasks"]
+    command: ["rust-redis-webserver", "--server"]
     ports:
       - "8000:8000"
     depends_on:
