@@ -45,9 +45,20 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
     for session in returning_sessions {
         let session_id = session.id;
 
-        // Extract the borrowed IP from sbx_config
-        let borrowed_ip_json = match &session.sbx_config {
-            Some(config) => config.clone(),
+        // Extract the borrowed IP and token from sbx_config
+        let (item, borrow_token) = match &session.sbx_config {
+            Some(config) => {
+                let item = config
+                    .get("item")
+                    .cloned()
+                    .unwrap_or_else(|| config.clone());
+                let borrow_token = config
+                    .get("borrow_token")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                (item, borrow_token)
+            }
             None => {
                 warn!(
                     "Session {} in ReturningIp status but sbx_config is None, archiving anyway",
@@ -62,9 +73,7 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
         info!("Returning IP for session {}", session_id);
 
         // Return the IP
-        let return_input = ip_allocator_client::types::ReturnInput {
-            item: borrowed_ip_json,
-        };
+        let return_input = ip_allocator_client::types::ReturnInput { item, borrow_token };
 
         match ip_client.handlers_ip_return_item(&return_input).await {
             Ok(_) => {

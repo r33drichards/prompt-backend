@@ -28,7 +28,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 jsonwebtoken = "9.3"
 reqwest = { version = "0.11", features = ["json"] }
 thiserror = "1.0"
-ip-allocator-client = "0.1.1"
+ip-allocator-client = "0.2.0"
 sandbox-client = { path = "agent-sandbox-sdk" }
 tempfile = "3.8"
 
