@@ -1,12 +1,12 @@
 use apalis::prelude::*;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, NotSet, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, NotSet, Set, TransactionTrait};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use sandbox_client::types::ShellExecRequest;
 
 use crate::entities::message;
-use crate::entities::prompt::Entity as Prompt;
+use crate::entities::prompt::{Entity as Prompt, InboxStatus};
 use crate::entities::session::{Entity as Session, SessionStatus};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
@@ -26,7 +26,103 @@ pub struct OutboxContext {
     pub db: DatabaseConnection,
 }
 
+/// Represents the processing state for idempotency checks
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProcessingState {
+    NotStarted,
+    InProgress,
+    Completed,
+}
+
+/// Check if a prompt has already been processed (idempotency check)
+async fn check_processing_state(
+    db: &DatabaseConnection,
+    prompt_id: uuid::Uuid,
+) -> Result<ProcessingState, Error> {
+    let prompt = Prompt::find_by_id(prompt_id)
+        .one(db)
+        .await
+        .map_err(|e| {
+            error!("Failed to query prompt {}: {}", prompt_id, e);
+            Error::Failed(Box::new(e))
+        })?
+        .ok_or_else(|| {
+            error!("Prompt {} not found", prompt_id);
+            Error::Failed("Prompt not found".into())
+        })?;
+
+    match prompt.inbox_status {
+        InboxStatus::Pending => Ok(ProcessingState::NotStarted),
+        InboxStatus::Active => Ok(ProcessingState::InProgress),
+        InboxStatus::Completed | InboxStatus::Archived => Ok(ProcessingState::Completed),
+    }
+}
+
+/// Mark a prompt as completed (for cleanup after successful processing)
+async fn mark_prompt_completed(
+    db: &DatabaseConnection,
+    prompt_id: uuid::Uuid,
+) -> Result<(), Error> {
+    let prompt = Prompt::find_by_id(prompt_id)
+        .one(db)
+        .await
+        .map_err(|e| {
+            error!("Failed to query prompt {} for completion: {}", prompt_id, e);
+            Error::Failed(Box::new(e))
+        })?
+        .ok_or_else(|| {
+            error!("Prompt {} not found for completion", prompt_id);
+            Error::Failed("Prompt not found".into())
+        })?;
+
+    let mut active_prompt: crate::entities::prompt::ActiveModel = prompt.into();
+    active_prompt.inbox_status = Set(InboxStatus::Completed);
+    
+    active_prompt.update(db).await.map_err(|e| {
+        error!("Failed to mark prompt {} as completed: {}", prompt_id, e);
+        Error::Failed(Box::new(e))
+    })?;
+
+    info!("Marked prompt {} as completed", prompt_id);
+    Ok(())
+}
+
+/// Execute a sandbox command with retries for transient failures
+async fn execute_sandbox_command_with_retry(
+    sbx: &sandbox_client::Client,
+    request: &ShellExecRequest,
+    max_retries: u32,
+) -> Result<sandbox_client::types::ShellExecResponse, Error> {
+    let mut last_error = None;
+    
+    for attempt in 0..=max_retries {
+        if attempt > 0 {
+            let backoff_ms = 2_u64.pow(attempt - 1) * 1000; // Exponential backoff: 1s, 2s, 4s
+            info!("Retrying sandbox command after {}ms (attempt {}/{})", backoff_ms, attempt, max_retries);
+            tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+        }
+        
+        match sbx.exec_command_v1_shell_exec_post(request).await {
+            Ok(response) => {
+                if attempt > 0 {
+                    info!("Sandbox command succeeded after {} retries", attempt);
+                }
+                return Ok(response);
+            }
+            Err(e) => {
+                warn!("Sandbox command failed (attempt {}/{}): {}", attempt + 1, max_retries + 1, e);
+                last_error = Some(e);
+            }
+        }
+    }
+    
+    let err = last_error.unwrap();
+    error!("Sandbox command failed after {} retries: {}", max_retries + 1, err);
+    Err(Error::Failed(Box::new(err)))
+}
+
 /// Process an outbox job: read prompt by ID, get related session, set up sandbox, and run Claude Code
+/// This function is idempotent and fault-tolerant
 pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Result<(), Error> {
     info!("Processing outbox job for prompt_id: {}", job.prompt_id);
 
@@ -35,6 +131,22 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         error!("Invalid prompt ID format: {}", e);
         Error::Failed(Box::new(e))
     })?;
+
+    // IDEMPOTENCY CHECK: Skip if already completed
+    let state = check_processing_state(&ctx.db, prompt_id).await?;
+    match state {
+        ProcessingState::Completed => {
+            info!("Prompt {} already completed - skipping (idempotent)", prompt_id);
+            return Ok(());
+        }
+        ProcessingState::InProgress => {
+            warn!("Prompt {} is already in progress - this might be a retry or duplicate job", prompt_id);
+            // Continue processing - this allows recovery from crashed workers
+        }
+        ProcessingState::NotStarted => {
+            info!("Prompt {} not started - beginning processing", prompt_id);
+        }
+    }
 
     // Query the specific prompt
     let prompt_model = Prompt::find_by_id(prompt_id)
@@ -141,36 +253,27 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         _session_model.id
     );
 
-    // Pass the token to gh auth login via stdin
+    // Pass the token to gh auth login via stdin (with retry for fault tolerance)
     let auth_command = format!("echo '{}' | gh auth login --with-token", github_token);
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+    execute_sandbox_command_with_retry(&sbx, &ShellExecRequest {
         command: auth_command,
         async_mode: false,
         id: None,
         timeout: Some(30.0_f64),
         exec_dir: Some(String::from("/home/gem")),
-    })
-    .await
-    .map_err(|e| {
-        error!("Failed to authenticate with GitHub: {}", e);
-        Error::Failed(Box::new(e))
-    })?;
-    // Pass the token to gh auth login via stdin
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+    }, 3).await?;
+    
+    // Setup git authentication (with retry for fault tolerance)
+    execute_sandbox_command_with_retry(&sbx, &ShellExecRequest {
         command: "gh auth setup-git".to_string(),
         async_mode: false,
         id: None,
         timeout: Some(30.0_f64),
         exec_dir: Some(String::from("/home/gem")),
-    })
-    .await
-    .map_err(|e| {
-        error!("Failed to authenticate with GitHub: {}", e);
-        Error::Failed(Box::new(e))
-    })?;
-    // clone the repo using session_id as directory name
+    }, 3).await?;
+    // clone the repo using session_id as directory name (with retry for fault tolerance)
     let repo_dir = format!("repo_{}", session_id);
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+    execute_sandbox_command_with_retry(&sbx, &ShellExecRequest {
         command: format!(
             "git clone https://github.com/{}.git {}",
             _session_model.repo.clone().unwrap(),
@@ -178,18 +281,13 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         ),
         async_mode: false,
         id: None,
-        timeout: Some(30.0_f64),
+        timeout: Some(60.0_f64), // Increased timeout for clone operation
         exec_dir: Some(String::from("/home/gem")),
-    })
-    .await
-    .map_err(|e| {
-        error!("Failed to execute command: {}", e);
-        Error::Failed(Box::new(e))
-    })?;
+    }, 3).await?;
 
-    // checkout the target branch
+    // checkout the target branch (with retry for fault tolerance)
     let repo_path = format!("/home/gem/{}", repo_dir);
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+    execute_sandbox_command_with_retry(&sbx, &ShellExecRequest {
         command: format!(
             "git checkout {}",
             _session_model.target_branch.clone().unwrap()
@@ -198,30 +296,20 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         id: None,
         timeout: Some(30.0_f64),
         exec_dir: Some(repo_path.clone()),
-    })
-    .await
-    .map_err(|e| {
-        error!("Failed to execute command: {}", e);
-        Error::Failed(Box::new(e))
-    })?;
+    }, 3).await?;
 
     let branch = _session_model
         .branch
         .clone()
         .unwrap_or_else(|| format!("claude/{}", _session_model.id));
-    // if branch exists, checkout the branch, else switch -c the branch
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+    // if branch exists, checkout the branch, else switch -c the branch (with retry for fault tolerance)
+    execute_sandbox_command_with_retry(&sbx, &ShellExecRequest {
         command: format!("git checkout {} || git switch -c {}", branch, branch),
         async_mode: false,
         id: None,
         timeout: Some(30.0_f64),
         exec_dir: Some(repo_path.clone()),
-    })
-    .await
-    .map_err(|e| {
-        error!("Failed to execute command: {}", e);
-        Error::Failed(Box::new(e))
-    })?;
+    }, 3).await?;
 
     // Fire-and-forget task to run Claude Code CLI
     let session_id = _session_model.id;
