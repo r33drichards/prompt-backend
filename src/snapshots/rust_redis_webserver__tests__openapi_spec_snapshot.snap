@@ -1119,7 +1119,6 @@ expression: spec
         "required": [
           "created_at",
           "id",
-          "session_status",
           "ui_status",
           "updated_at"
         ],
@@ -1150,9 +1149,6 @@ expression: spec
             "type": "string",
             "nullable": true
           },
-          "session_status": {
-            "$ref": "#/components/schemas/SessionStatus"
-          },
           "ui_status": {
             "$ref": "#/components/schemas/UiStatus"
           },
@@ -1167,14 +1163,6 @@ expression: spec
             "nullable": true
           }
         }
-      },
-      "SessionStatus": {
-        "type": "string",
-        "enum": [
-          "Active",
-          "Archived",
-          "ReturningIp"
-        ]
       },
       "UiStatus": {
         "type": "string",
@@ -1244,14 +1232,6 @@ expression: spec
           },
           "title": {
             "type": "string",
-            "nullable": true
-          },
-          "session_status": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SessionStatus"
-              }
-            ],
             "nullable": true
           },
           "ui_status": {

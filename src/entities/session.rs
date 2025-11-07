@@ -19,9 +19,6 @@ pub struct Model {
     pub target_branch: Option<String>,
     #[sea_orm(nullable)]
     pub title: Option<String>,
-    pub session_status: SessionStatus,
-    #[sea_orm(nullable)]
-    pub status_message: Option<String>,
     pub ui_status: UiStatus,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
@@ -46,19 +43,6 @@ impl Related<super::prompt::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
-
-#[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema,
-)]
-#[sea_orm(rs_type = "String", db_type = "String(Some(50))")]
-pub enum SessionStatus {
-    #[sea_orm(string_value = "active")]
-    Active,
-    #[sea_orm(string_value = "archived")]
-    Archived,
-    #[sea_orm(string_value = "returning_ip")]
-    ReturningIp,
-}
 
 #[derive(
     Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema,

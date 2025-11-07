@@ -86,7 +86,6 @@ async fn poll_and_enqueue_prompts(
             "borrow_token": borrowed_ip.borrow_token,
         });
         active_session.sbx_config = Set(Some(sbx_config_data));
-        active_session.status_message = Set(Some("Found Sandbox".to_string()));
         active_session.ui_status = Set(UiStatus::InProgress);
         active_session.update(db).await?;
 

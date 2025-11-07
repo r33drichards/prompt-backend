@@ -2,10 +2,10 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, Qu
 use std::time::Duration;
 use tracing::{error, info, warn};
 
-use crate::entities::session::{self, Entity as Session, SessionStatus, UiStatus};
+use crate::entities::session::{self, Entity as Session, UiStatus};
 use crate::services::dead_letter_queue::{exists_in_dlq, insert_dlq_entry, MAX_RETRY_COUNT};
 
-/// Periodic poller that checks for sessions in ReturningIp status every 5 seconds
+/// Periodic poller that checks for sessions in NeedsReview status every 5 seconds
 /// and returns their IPs to the allocator
 pub async fn run_ip_return_poller(db: DatabaseConnection) -> anyhow::Result<()> {
     info!("Starting IP return poller - checking every 5 seconds");
@@ -26,11 +26,11 @@ pub async fn run_ip_return_poller(db: DatabaseConnection) -> anyhow::Result<()> 
     }
 }
 
-/// Query for sessions in ReturningIp status and return their IPs
+/// Query for sessions in NeedsReview status and return their IPs
 async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
-    // Query all sessions with ReturningIp status that still have sbx_config
+    // Query all sessions with NeedsReview status that still have sbx_config
     let returning_sessions = Session::find()
-        .filter(session::Column::SessionStatus.eq(SessionStatus::ReturningIp))
+        .filter(session::Column::UiStatus.eq(UiStatus::NeedsReview))
         .filter(session::Column::SbxConfig.is_not_null())
         .all(db)
         .await?;
@@ -81,7 +81,7 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
             }
             None => {
                 warn!(
-                    "Session {} in ReturningIp status but sbx_config is None, archiving anyway",
+                    "Session {} in NeedsReview status but sbx_config is None, archiving anyway",
                     session_id
                 );
                 // Archive the session without returning IP
@@ -103,12 +103,10 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
             Ok(_) => {
                 info!("Successfully returned IP for session {}", session_id);
 
-                // Set sbx_config to null, reset retry count, and update session status to Archived
+                // Set sbx_config to null, reset retry count, and update ui_status to Archived
                 let mut active_session: session::ActiveModel = session.into();
                 active_session.sbx_config = Set(None);
-                active_session.session_status = Set(SessionStatus::Archived);
-                active_session.status_message = Set(Some("IP returned successfully".to_string()));
-                active_session.ui_status = Set(UiStatus::NeedsReview);
+                active_session.ui_status = Set(UiStatus::Archived);
                 active_session.ip_return_retry_count = Set(0);
 
                 if let Err(e) = active_session.update(db).await {
@@ -119,7 +117,7 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
                     // Continue processing other sessions
                 } else {
                     info!(
-                        "Updated session {} - set sbx_config to null and status to Archived",
+                        "Updated session {} - set sbx_config to null and ui_status to Archived",
                         session_id
                     );
                 }
@@ -161,10 +159,6 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
 
                             // Update session to mark it as in DLQ
                             let mut active_session: session::ActiveModel = session.into();
-                            active_session.status_message = Set(Some(format!(
-                                "Moved to dead letter queue after {} failed attempts",
-                                new_retry_count
-                            )));
                             active_session.ip_return_retry_count = Set(new_retry_count);
 
                             if let Err(e) = active_session.update(db).await {
@@ -185,10 +179,6 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
                     // Increment retry count and continue
                     let mut active_session: session::ActiveModel = session.into();
                     active_session.ip_return_retry_count = Set(new_retry_count);
-                    active_session.status_message = Set(Some(format!(
-                        "IP return failed (attempt {}/{}): {}",
-                        new_retry_count, MAX_RETRY_COUNT, error_msg
-                    )));
 
                     if let Err(e) = active_session.update(db).await {
                         error!(
@@ -209,9 +199,7 @@ async fn archive_session(db: &DatabaseConnection, session: session::Model) -> an
     let session_id = session.id;
     let mut active_session: session::ActiveModel = session.into();
     active_session.sbx_config = Set(None);
-    active_session.session_status = Set(SessionStatus::Archived);
-    active_session.status_message = Set(Some("Archived (no IP to return)".to_string()));
-    active_session.ui_status = Set(UiStatus::NeedsReview);
+    active_session.ui_status = Set(UiStatus::Archived);
 
     active_session.update(db).await?;
     info!("Archived session {} without IP return", session_id);
