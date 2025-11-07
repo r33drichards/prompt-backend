@@ -89,30 +89,30 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         prompt_content.chars().take(100).collect::<String>()
     );
 
-    // get sbx config from ip-allocator
-    // Read IP_ALLOCATOR_URL from environment, e.g., "http://localhost:8000"
-    let ip_allocator_url =
-        std::env::var("IP_ALLOCATOR_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
-
-    let ip_client = ip_allocator_client::Client::new(&ip_allocator_url);
-    let borrowed_ip = ip_client.handlers_ip_borrow(None).await.map_err(|e| {
-        error!("Failed to borrow IP: {}", e);
-        Error::Failed(Box::new(e))
+    // Read borrowed IP from session's sbx_config (already allocated by prompt_poller)
+    let borrowed_ip_json = _session_model.sbx_config.as_ref().ok_or_else(|| {
+        error!(
+            "Session {} has no sbx_config - IP should have been borrowed during enqueue",
+            session_id
+        );
+        Error::Failed("Session missing sbx_config".into())
     })?;
 
-    // Parse the response JSON to extract mcp_url and api_url
-    let mcp_json_string = borrowed_ip.item["mcp_json_string"]
+    info!("Using pre-allocated sandbox from session sbx_config");
+
+    // Parse the sbx_config JSON to extract mcp_json_string and api_url
+    let mcp_json_string = borrowed_ip_json["mcp_json_string"]
         .as_str()
-        .ok_or_else(|| Error::Failed("Missing mcp_json_string in response".into()))?
+        .ok_or_else(|| Error::Failed("Missing mcp_json_string in sbx_config".into()))?
         .to_string();
 
-    info!("Borrowed sandbox - mcp_json_string: {}", mcp_json_string);
+    info!("Sandbox mcp_json_string: {}", mcp_json_string);
 
-    let api_url = borrowed_ip.item["api_url"]
+    let api_url = borrowed_ip_json["api_url"]
         .as_str()
-        .ok_or_else(|| Error::Failed("Missing api_url in response".into()))?;
+        .ok_or_else(|| Error::Failed("Missing api_url in sbx_config".into()))?;
 
-    info!("Borrowed sandbox - api_url: {}", api_url);
+    info!("Sandbox api_url: {}", api_url);
 
     // Create sandbox client using the api_url
     let sbx = sandbox_client::Client::new(api_url);
@@ -221,7 +221,9 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     // Fire-and-forget task to run Claude Code CLI
     let session_id = _session_model.id;
     let prompt_id_clone = prompt_id;
-    let borrowed_ip_item = borrowed_ip.item.clone();
+    let borrowed_ip_item = borrowed_ip_json.clone();
+    let ip_allocator_url =
+        std::env::var("IP_ALLOCATOR_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
     let ip_allocator_url_clone = ip_allocator_url.clone();
     let db_clone = ctx.db.clone();
     let prompt_content_clone = prompt_content.clone();
