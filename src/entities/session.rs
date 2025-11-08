@@ -55,6 +55,8 @@ pub enum UiStatus {
     InProgress,
     #[sea_orm(string_value = "needs_review")]
     NeedsReview,
+    #[sea_orm(string_value = "needs_review_ip_returned")]
+    NeedsReviewIpReturned,
     #[sea_orm(string_value = "archived")]
     Archived,
 }

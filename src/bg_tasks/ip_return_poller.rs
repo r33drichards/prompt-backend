@@ -85,7 +85,6 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
                     session_id
                 );
                 // Archive the session without returning IP
-                archive_session(db, session).await?;
                 continue;
             }
         };
@@ -106,7 +105,7 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
                 // Set sbx_config to null, reset retry count, and update ui_status to Archived
                 let mut active_session: session::ActiveModel = session.into();
                 active_session.sbx_config = Set(None);
-                active_session.ui_status = Set(UiStatus::Archived);
+                active_session.ui_status = Set(UiStatus::NeedsReviewIpReturned);
                 active_session.ip_return_retry_count = Set(0);
 
                 if let Err(e) = active_session.update(db).await {
@@ -194,15 +193,4 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
     Ok(count)
 }
 
-/// Archive a session without returning IP (when sbx_config is already None)
-async fn archive_session(db: &DatabaseConnection, session: session::Model) -> anyhow::Result<()> {
-    let session_id = session.id;
-    let mut active_session: session::ActiveModel = session.into();
-    active_session.sbx_config = Set(None);
-    active_session.ui_status = Set(UiStatus::Archived);
 
-    active_session.update(db).await?;
-    info!("Archived session {} without IP return", session_id);
-
-    Ok(())
-}
