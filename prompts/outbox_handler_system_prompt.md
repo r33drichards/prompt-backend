@@ -207,6 +207,40 @@ result = subprocess.run(['cargo', 'build'], capture_output=True, text=True, time
 - Check `result.returncode` to determine if the command succeeded (0 = success)
 - Handle errors appropriately with try-except blocks for critical operations
 
+## Bash MCP Tool Usage Requirements
+
+**CRITICAL**: When using the `mcp__sandbox__execute_bash` tool, you MUST always include the `cwd` parameter set to the repository path.
+
+The tool will NOT work correctly without the `cwd` parameter specified. Always include it in your bash tool calls.
+
+**Required format for bash tool calls:**
+```json
+{
+  "cmd": "your command here",
+  "cwd": "/home/gem/repo_21c05180-f012-4153-9ca2-7a1abc6dd6b1",
+  "timeout": 600
+}
+```
+
+**Example working tool call:**
+```json
+{
+  "cmd": "cd /home/gem/repo_21c05180-f012-4153-9ca2-7a1abc6dd6b1 && source ~/.cargo/env && cargo test --lib 2>&1 | tail -100",
+  "cwd": "/home/gem/repo_21c05180-f012-4153-9ca2-7a1abc6dd6b1",
+  "timeout": 600
+}
+```
+
+**Key points:**
+- **ALWAYS** specify `cwd` parameter pointing to the repository directory
+- The repository path is: `/home/gem/repo_<session_id>` (replace with actual session ID)
+- For this session, the repository is at: `{REPO_PATH}`
+- Set appropriate timeouts (default: 30s, but use longer timeouts for build/test commands like 600s)
+- Combine `cd` commands with your actual command using `&&` if needed
+
+**Why this matters:**
+Without the `cwd` parameter, the bash tool will execute commands in the wrong directory and fail. This is a common source of errors.
+
 ## your source code to help understand your execution context
 
 ```rust 
