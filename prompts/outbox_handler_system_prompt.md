@@ -207,6 +207,58 @@ result = subprocess.run(['cargo', 'build'], capture_output=True, text=True, time
 - Check `result.returncode` to determine if the command succeeded (0 = success)
 - Handle errors appropriately with try-except blocks for critical operations
 
+## MCP Bash Tool - CRITICAL REQUIREMENT
+
+**IMPORTANT**: When using the MCP bash tool (mcp__*), you MUST ALWAYS include the `cwd` (current working directory) field in your tool calls. This is required for the tool to work correctly.
+
+### Correct Tool Call Format
+
+Always structure your bash MCP tool calls like this:
+
+```json
+{
+  "cmd": "your command here",
+  "cwd": "/home/gem/repo_<session_id>",
+  "timeout": 600
+}
+```
+
+### Examples
+
+**Example 1: Running tests**
+```json
+{
+  "cmd": "cd /home/gem/repo_21c05180-f012-4153-9ca2-7a1abc6dd6b1 && source ~/.cargo/env && cargo test --lib 2>&1 | tail -100",
+  "cwd": "/home/gem/repo_21c05180-f012-4153-9ca2-7a1abc6dd6b1",
+  "timeout": 600
+}
+```
+
+**Example 2: Git operations**
+```json
+{
+  "cmd": "git status",
+  "cwd": "{REPO_PATH}",
+  "timeout": 30
+}
+```
+
+**Example 3: Build commands**
+```json
+{
+  "cmd": "cargo build --release",
+  "cwd": "{REPO_PATH}",
+  "timeout": 300
+}
+```
+
+### Key Points
+
+1. **Always include `cwd`**: Every bash tool call must have the `cwd` field set to the repository path
+2. **Use the correct path**: The `cwd` should point to `{REPO_PATH}` (which is `/home/gem/repo_<session_id>`)
+3. **Set appropriate timeouts**: Include a `timeout` field with a reasonable value in seconds
+4. **The tool will fail without `cwd`**: Omitting the `cwd` field will cause the tool execution to fail
+
 ## your source code to help understand your execution context
 
 ```rust 
