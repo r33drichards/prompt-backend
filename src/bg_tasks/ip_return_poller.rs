@@ -192,5 +192,3 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
 
     Ok(count)
 }
-
-
