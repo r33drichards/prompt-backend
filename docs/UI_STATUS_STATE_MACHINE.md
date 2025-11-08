@@ -12,6 +12,7 @@ stateDiagram-v2
     InProgress --> NeedsReview: Work Completed
     NeedsReview --> Pending: User Adds New Prompt
     NeedsReview --> NeedsReviewIpReturned: IP Returned
+    NeedsReviewIpReturned --> Pending: User Adds New Prompt
     NeedsReviewIpReturned --> [*]
     
     note right of Pending
@@ -195,7 +196,30 @@ stateDiagram-v2
 
 ---
 
-### 6. Manual State Updates (via API)
+### 6. NeedsReviewIpReturned → Pending
+
+**Trigger:** User adds a new prompt to the session after IP has been returned
+
+**Location:** `src/handlers/prompts.rs`
+- `create()` function (line ~79-123)
+- State check and update (line ~99-107)
+
+**Database Changes:**
+- **session table UPDATE:**
+  - `ui_status` = `\"pending\"` (only if current status is `\"needs_review_ip_returned\"`)
+  - `sbx_config` = UNCHANGED (should already be NULL, will be set when new IP borrowed)
+  - `updated_at` = Current timestamp
+- **prompt table INSERT:**
+  - New prompt record created
+  - `inbox_status` = `\"pending\"`
+  - `session_id` = Parent session ID
+  - `data` = User's prompt content
+
+**Note:** This transition allows users to continue iterating on their work even after the IP has been returned. When the prompt poller picks up the new prompt, it will borrow a fresh IP and transition the session to InProgress.
+
+---
+
+### 7. Manual State Updates (via API)
 
 **Trigger:** Administrator manually updates session via API
 
@@ -346,7 +370,7 @@ PUT /sessions/:id
 ### Create Additional Prompt
 ```bash
 POST /prompts
-# If session.ui_status == NeedsReview:
+# If session.ui_status IN (NeedsReview, NeedsReviewIpReturned):
 #   Sets ui_status = Pending
 ```
 

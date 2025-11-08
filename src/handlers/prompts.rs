@@ -96,8 +96,8 @@ pub async fn create(
         .map_err(|e| Error::database_error(e.to_string()))?
         .ok_or_else(|| Error::not_found("Session not found".to_string()))?;
 
-    // If session is in NeedsReview state, transition to Pending when adding new prompt
-    if session.ui_status == UiStatus::NeedsReview {
+    // If session is in NeedsReview or NeedsReviewIpReturned state, transition to Pending when adding new prompt
+    if session.ui_status == UiStatus::NeedsReview || session.ui_status == UiStatus::NeedsReviewIpReturned {
         let mut active_session: session::ActiveModel = session.into();
         active_session.ui_status = Set(UiStatus::Pending);
         active_session
