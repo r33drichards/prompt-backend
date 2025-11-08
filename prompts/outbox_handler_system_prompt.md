@@ -218,7 +218,7 @@ The tool will NOT work correctly without the `cwd` parameter specified. Always i
 {
   "cmd": "your command here",
   "cwd": "/home/gem/repo_21c05180-f012-4153-9ca2-7a1abc6dd6b1",
-  "timeout": 600
+  "timeout": 10
 }
 ```
 
@@ -227,7 +227,7 @@ The tool will NOT work correctly without the `cwd` parameter specified. Always i
 {
   "cmd": "cd /home/gem/repo_21c05180-f012-4153-9ca2-7a1abc6dd6b1 && source ~/.cargo/env && cargo test --lib 2>&1 | tail -100",
   "cwd": "/home/gem/repo_21c05180-f012-4153-9ca2-7a1abc6dd6b1",
-  "timeout": 600
+  "timeout": 10
 }
 ```
 
