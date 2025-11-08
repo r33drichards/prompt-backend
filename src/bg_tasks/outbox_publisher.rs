@@ -309,10 +309,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
             // Helper function to build Claude Code command
             let build_command = |session_arg: &str| -> Command {
-                let mut cmd = Command::new("npx");
+                let mut cmd = Command::new("claude");
                 cmd.args([
-                    "-y",
-                    "@anthropic-ai/claude-code",
                     "--dangerously-skip-permissions",
                     "--print",
                     "--output-format=stream-json",
