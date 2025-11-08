@@ -1,8 +1,6 @@
 use apalis::prelude::Storage;
 use apalis_sql::postgres::{PgPool, PostgresStorage};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
-};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::time::Duration;
 use tracing::{error, info};
 
