@@ -1,11 +1,11 @@
 use apalis::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, NotSet, Order, QueryFilter,
-    QueryOrder, Set,
+    QueryOrder, Set, TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use sandbox_client::types::FileContentEncoding;
 use sandbox_client::types::FileWriteRequest;
@@ -13,7 +13,7 @@ use sandbox_client::types::ShellExecRequest;
 
 use crate::entities::message;
 use crate::entities::message::Entity as Message;
-use crate::entities::prompt::Entity as Prompt;
+use crate::entities::prompt::{Entity as Prompt, InboxStatus};
 use crate::entities::session::{Entity as Session, UiStatus};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
@@ -105,6 +105,7 @@ async fn get_formatted_session_history(
 }
 
 /// Process an outbox job: read prompt by ID, get related session, set up sandbox, and run Claude Code
+/// This function is FAULT-TOLERANT and IDEMPOTENT
 pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Result<(), Error> {
     info!("Processing outbox job for prompt_id: {}", job.prompt_id);
 
@@ -113,6 +114,97 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         error!("Invalid prompt ID format: {}", e);
         Error::Failed(Box::new(e))
     })?;
+
+    // IDEMPOTENCY CHECK: Use transaction to atomically check and update prompt status
+    // This prevents race conditions where multiple workers try to process the same job
+    let txn = ctx.db.begin().await.map_err(|e| {
+        error!("Failed to begin transaction for prompt {}: {}", prompt_id, e);
+        Error::Failed(Box::new(e))
+    })?;
+
+    // Query the specific prompt within transaction
+    let prompt_model = Prompt::find_by_id(prompt_id)
+        .one(&txn)
+        .await
+        .map_err(|e| {
+            error!("Failed to query prompt {}: {}", prompt_id, e);
+            Error::Failed(Box::new(e))
+        })?
+        .ok_or_else(|| {
+            error!("Prompt {} not found", prompt_id);
+            Error::Failed("Prompt not found".into())
+        })?;
+
+    // Check if prompt is already completed or being processed
+    match prompt_model.inbox_status {
+        InboxStatus::Completed => {
+            info!("Prompt {} already completed, skipping (idempotent)", prompt_id);
+            txn.commit().await.map_err(|e| {
+                error!("Failed to commit transaction: {}", e);
+                Error::Failed(Box::new(e))
+            })?;
+            return Ok(());
+        }
+        InboxStatus::Active => {
+            warn!("Prompt {} is already being processed by another worker, skipping", prompt_id);
+            txn.commit().await.map_err(|e| {
+                error!("Failed to commit transaction: {}", e);
+                Error::Failed(Box::new(e))
+            })?;
+            return Ok(());
+        }
+        InboxStatus::Archived => {
+            info!("Prompt {} is archived, skipping", prompt_id);
+            txn.commit().await.map_err(|e| {
+                error!("Failed to commit transaction: {}", e);
+                Error::Failed(Box::new(e))
+            })?;
+            return Ok(());
+        }
+        InboxStatus::Pending => {
+            // This is the expected state, continue processing
+            info!("Prompt {} is pending, starting processing", prompt_id);
+        }
+    }
+
+    // Atomically update status to Active to claim this job
+    let mut active_prompt: crate::entities::prompt::ActiveModel = prompt_model.clone().into();
+    active_prompt.inbox_status = Set(InboxStatus::Active);
+    
+    active_prompt.update(&txn).await.map_err(|e| {
+        error!("Failed to update prompt {} status to Active: {}", prompt_id, e);
+        Error::Failed(Box::new(e))
+    })?;
+
+    // Commit the transaction to release the lock
+    txn.commit().await.map_err(|e| {
+        error!("Failed to commit transaction for prompt {}: {}", prompt_id, e);
+        Error::Failed(Box::new(e))
+    })?;
+
+    info!("Successfully claimed prompt {} for processing", prompt_id);
+
+    // Define a helper to rollback prompt status on error
+    let rollback_prompt_status = |prompt_id: uuid::Uuid, db: &DatabaseConnection| async move {
+        warn!("Rolling back prompt {} status to Pending due to error", prompt_id);
+        match Prompt::find_by_id(prompt_id).one(db).await {
+            Ok(Some(prompt)) => {
+                let mut active_prompt: crate::entities::prompt::ActiveModel = prompt.into();
+                active_prompt.inbox_status = Set(InboxStatus::Pending);
+                if let Err(e) = active_prompt.update(db).await {
+                    error!("Failed to rollback prompt {} status: {}", prompt_id, e);
+                } else {
+                    info!("Successfully rolled back prompt {} status to Pending", prompt_id);
+                }
+            }
+            Ok(None) => {
+                error!("Prompt {} not found during rollback", prompt_id);
+            }
+            Err(e) => {
+                error!("Failed to query prompt {} for rollback: {}", prompt_id, e);
+            }
+        }
+    };
 
     // Query the specific prompt
     let prompt_model = Prompt::find_by_id(prompt_id)
@@ -284,24 +376,45 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         error!("Failed to authenticate with GitHub: {}", e);
         Error::Failed(Box::new(e))
     })?;
-    // clone the repo using session_id as directory name
+    // IDEMPOTENT: Clone the repo using session_id as directory name
+    // If repo already exists (from a previous failed attempt), skip cloning
     let repo_dir = format!("repo_{}", session_id);
-    sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: format!(
-            "git clone https://github.com/{}.git {}",
-            _session_model.repo.clone().unwrap(),
-            repo_dir
-        ),
+    let repo_path = format!("/home/gem/{}", repo_dir);
+    
+    info!("Checking if repo {} already exists in sandbox", repo_dir);
+    let check_result = sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+        command: format!("test -d {}", repo_path),
         async_mode: false,
         id: None,
-        timeout: Some(30.0_f64),
+        timeout: Some(10.0_f64),
         exec_dir: Some(String::from("/home/gem")),
     })
-    .await
-    .map_err(|e| {
-        error!("Failed to execute command: {}", e);
-        Error::Failed(Box::new(e))
-    })?;
+    .await;
+
+    let repo_exists = check_result.is_ok();
+    
+    if repo_exists {
+        info!("Repo {} already exists, skipping clone (idempotent)", repo_dir);
+    } else {
+        info!("Cloning repo to {}", repo_dir);
+        sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+            command: format!(
+                "git clone https://github.com/{}.git {}",
+                _session_model.repo.clone().unwrap(),
+                repo_dir
+            ),
+            async_mode: false,
+            id: None,
+            timeout: Some(60.0_f64), // Increased timeout for large repos
+            exec_dir: Some(String::from("/home/gem")),
+        })
+        .await
+        .map_err(|e| {
+            error!("Failed to clone repository: {}", e);
+            Error::Failed(Box::new(e))
+        })?;
+        info!("Successfully cloned repository");
+    }
 
     // checkout the target branch
     let repo_path = format!("/home/gem/{}", repo_dir);
@@ -556,13 +669,15 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         Error::Failed(Box::new(e))
     })?;
 
-    // Log the CLI result
+    // Log the CLI result and handle errors with rollback
     match cli_result {
         Ok(status) => {
             info!("Claude CLI completed with status: {:?}", status);
         }
         Err(e) => {
             error!("Claude CLI process failed: {}", e);
+            // Rollback prompt status to Pending so it can be retried
+            rollback_prompt_status(prompt_id, &ctx.db).await;
             return Err(Error::Failed(Box::new(e)));
         }
     }
@@ -581,6 +696,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     "Failed to update session {} ui_status to NeedsReview: {}",
                     session_id, e
                 );
+                // Rollback prompt status on error
+                rollback_prompt_status(prompt_id, &ctx.db).await;
                 return Err(Error::Failed(Box::new(e)));
             } else {
                 info!(
@@ -594,6 +711,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                 "Session {} not found when trying to update status",
                 session_id
             );
+            // Rollback prompt status on error
+            rollback_prompt_status(prompt_id, &ctx.db).await;
             return Err(Error::Failed("Session not found".into()));
         }
         Err(e) => {
@@ -601,7 +720,32 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                 "Failed to query session {} for status update: {}",
                 session_id, e
             );
+            // Rollback prompt status on error
+            rollback_prompt_status(prompt_id, &ctx.db).await;
             return Err(Error::Failed(Box::new(e)));
+        }
+    }
+
+    // MARK PROMPT AS COMPLETED - Final step for idempotency
+    info!("Marking prompt {} as Completed", prompt_id);
+    match Prompt::find_by_id(prompt_id).one(&ctx.db).await {
+        Ok(Some(prompt)) => {
+            let mut active_prompt: crate::entities::prompt::ActiveModel = prompt.into();
+            active_prompt.inbox_status = Set(InboxStatus::Completed);
+            
+            if let Err(e) = active_prompt.update(&ctx.db).await {
+                error!("Failed to mark prompt {} as Completed: {}", prompt_id, e);
+                // This is not critical - the work is done, just log the error
+                warn!("Prompt {} processing succeeded but status update failed - may be retried", prompt_id);
+            } else {
+                info!("Successfully marked prompt {} as Completed", prompt_id);
+            }
+        }
+        Ok(None) => {
+            error!("Prompt {} not found when trying to mark as Completed", prompt_id);
+        }
+        Err(e) => {
+            error!("Failed to query prompt {} for completion update: {}", prompt_id, e);
         }
     }
 
