@@ -81,6 +81,9 @@ async fn poll_and_enqueue_prompts(
             session_model.id, borrowed_ip.item
         );
 
+        // Save session_id before moving session_model
+        let session_id = session_model.id;
+
         // Update session's sbx_config with the borrowed IP data (including borrow_token)
         let mut active_session: session::ActiveModel = session_model.into();
         let sbx_config_data = serde_json::json!({
@@ -93,7 +96,7 @@ async fn poll_and_enqueue_prompts(
 
         info!(
             "Updated session {} sbx_config with borrowed IP",
-            session_model.id
+            session_id
         );
 
         // Enqueue each prompt for this session
