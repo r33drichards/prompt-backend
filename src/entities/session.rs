@@ -19,9 +19,7 @@ pub struct Model {
     pub target_branch: Option<String>,
     #[sea_orm(nullable)]
     pub title: Option<String>,
-    pub session_status: SessionStatus,
-    #[sea_orm(nullable)]
-    pub status_message: Option<String>,
+    pub ui_status: UiStatus,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
     #[sea_orm(nullable)]
@@ -50,11 +48,15 @@ impl ActiveModelBehavior for ActiveModel {}
     Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema,
 )]
 #[sea_orm(rs_type = "String", db_type = "String(Some(50))")]
-pub enum SessionStatus {
-    #[sea_orm(string_value = "active")]
-    Active,
+pub enum UiStatus {
+    #[sea_orm(string_value = "pending")]
+    Pending,
+    #[sea_orm(string_value = "in_progress")]
+    InProgress,
+    #[sea_orm(string_value = "needs_review")]
+    NeedsReview,
+    #[sea_orm(string_value = "needs_review_ip_returned")]
+    NeedsReviewIpReturned,
     #[sea_orm(string_value = "archived")]
     Archived,
-    #[sea_orm(string_value = "returning_ip")]
-    ReturningIp,
 }

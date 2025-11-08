@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthenticatedUser;
 use crate::entities::prompt::{self, InboxStatus};
-use crate::entities::session::{self, Entity as Session, Model as SessionModel, SessionStatus};
+use crate::entities::session::{self, Entity as Session, Model as SessionModel, UiStatus};
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
 
@@ -55,7 +55,7 @@ pub struct SessionDto {
     pub repo: Option<String>,
     pub target_branch: Option<String>,
     pub title: Option<String>,
-    pub session_status: SessionStatus,
+    pub ui_status: UiStatus,
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
@@ -71,7 +71,7 @@ impl From<SessionModel> for SessionDto {
             repo: model.repo,
             target_branch: model.target_branch,
             title: model.title,
-            session_status: model.session_status,
+            ui_status: model.ui_status,
             created_at: model.created_at.to_string(),
             updated_at: model.updated_at.to_string(),
             deleted_at: model.deleted_at.map(|d| d.to_string()),
@@ -98,7 +98,7 @@ pub struct UpdateSessionInput {
     pub repo: Option<String>,
     pub target_branch: Option<String>,
     pub title: Option<String>,
-    pub session_status: Option<SessionStatus>,
+    pub ui_status: Option<UiStatus>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -158,8 +158,7 @@ pub async fn create(
         repo: Set(Some(input.repo.clone())),
         target_branch: Set(Some(input.target_branch.clone())),
         title: Set(Some(title)),
-        session_status: Set(SessionStatus::Active),
-        status_message: Set(Some("Waiting for Sandbox".to_string())),
+        ui_status: Set(UiStatus::Pending),
         user_id: Set(user.user_id.clone()),
         ip_return_retry_count: Set(0),
         created_at: NotSet,
@@ -233,8 +232,7 @@ pub async fn create_with_prompt(
         repo: Set(Some(input.repo.clone())),
         target_branch: Set(Some(input.target_branch.clone())),
         title: Set(Some(title)),
-        session_status: Set(SessionStatus::Active),
-        status_message: Set(Some("Waiting for Sandbox".to_string())),
+        ui_status: Set(UiStatus::Pending),
         user_id: Set(user.user_id.clone()),
         ip_return_retry_count: Set(0),
         created_at: NotSet,
@@ -365,8 +363,8 @@ pub async fn update(
     if input.title.is_some() {
         active_session.title = Set(input.title.clone());
     }
-    if let Some(status) = &input.session_status {
-        active_session.session_status = Set(status.clone());
+    if let Some(ui_status) = &input.ui_status {
+        active_session.ui_status = Set(ui_status.clone());
     }
 
     match active_session.update(db.inner()).await {

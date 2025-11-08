@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use super::outbox_publisher::OutboxJob;
 use crate::entities::prompt::{self, Entity as Prompt, InboxStatus};
-use crate::entities::session::{self, Entity as Session};
+use crate::entities::session::{self, Entity as Session, UiStatus};
 
 /// Periodic poller that checks for pending prompts every second
 /// and pushes them to the outbox queue for processing
@@ -86,7 +86,7 @@ async fn poll_and_enqueue_prompts(
             "borrow_token": borrowed_ip.borrow_token,
         });
         active_session.sbx_config = Set(Some(sbx_config_data));
-        active_session.status_message = Set(Some("Found Sandbox".to_string()));
+        active_session.ui_status = Set(UiStatus::InProgress);
         active_session.update(db).await?;
 
         info!(

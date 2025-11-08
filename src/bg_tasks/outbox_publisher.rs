@@ -7,7 +7,7 @@ use sandbox_client::types::ShellExecRequest;
 
 use crate::entities::message;
 use crate::entities::prompt::Entity as Prompt;
-use crate::entities::session::{Entity as Session, SessionStatus};
+use crate::entities::session::{Entity as Session, UiStatus};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -442,8 +442,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         })
         .await;
 
-        // Update session status to ReturningIp (poller will handle IP return)
-        info!("Updating session {} status to ReturningIp", session_id);
+        // Update session ui_status to NeedsReview (poller will handle IP return)
+        info!("Updating session {} ui_status to NeedsReview", session_id);
 
         let session_result = Session::find_by_id(session_id)
             .one(&db_clone_for_return)
@@ -452,17 +452,16 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             Ok(Some(session_model)) => {
                 let mut active_session: crate::entities::session::ActiveModel =
                     session_model.into();
-                active_session.session_status = Set(SessionStatus::ReturningIp);
-                active_session.status_message = Set(Some("Returning IP".to_string()));
+                active_session.ui_status = Set(UiStatus::NeedsReview);
 
                 if let Err(e) = active_session.update(&db_clone_for_return).await {
                     error!(
-                        "Failed to update session {} status to ReturningIp: {}",
+                        "Failed to update session {} ui_status to NeedsReview: {}",
                         session_id, e
                     );
                 } else {
                     info!(
-                        "Updated session {} status to ReturningIp - poller will handle IP return",
+                        "Updated session {} ui_status to NeedsReview - poller will handle IP return",
                         session_id
                     );
                 }
