@@ -5,7 +5,7 @@ use tracing::{error, info, warn};
 use crate::entities::session::{self, Entity as Session, UiStatus};
 use crate::services::dead_letter_queue::{exists_in_dlq, insert_dlq_entry, MAX_RETRY_COUNT};
 
-/// Periodic poller that checks for sessions in NeedsReview status every 5 seconds
+/// Periodic poller that checks for sessions in NeedsReview or Archived status every 5 seconds
 /// and returns their IPs to the allocator
 pub async fn run_ip_return_poller(db: DatabaseConnection) -> anyhow::Result<()> {
     info!("Starting IP return poller - checking every 5 seconds");
@@ -26,11 +26,11 @@ pub async fn run_ip_return_poller(db: DatabaseConnection) -> anyhow::Result<()> 
     }
 }
 
-/// Query for sessions in NeedsReview status and return their IPs
+/// Query for sessions in NeedsReview or Archived status and return their IPs
 async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
-    // Query all sessions with NeedsReview status that still have sbx_config
+    // Query all sessions with NeedsReview or Archived status that still have sbx_config
     let returning_sessions = Session::find()
-        .filter(session::Column::UiStatus.eq(UiStatus::NeedsReview))
+        .filter(session::Column::UiStatus.is_in([UiStatus::NeedsReview, UiStatus::Archived]))
         .filter(session::Column::SbxConfig.is_not_null())
         .all(db)
         .await?;
@@ -81,7 +81,7 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
             }
             None => {
                 warn!(
-                    "Session {} in NeedsReview status but sbx_config is None, archiving anyway",
+                    "Session {} in NeedsReview or Archived status but sbx_config is None, archiving anyway",
                     session_id
                 );
                 // Archive the session without returning IP

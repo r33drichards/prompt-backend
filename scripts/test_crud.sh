@@ -111,7 +111,7 @@ echo "Test 4: Updating the session..."
 UPDATE_RESPONSE=$(curl -s -X PUT http://localhost:8000/sessions/$SESSION_ID \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -d "{\"id\": \"$SESSION_ID\", \"session_status\": \"Archived\", \"sbx_config\": {\"setting\": \"new_value\"}}")
+  -d "{\"id\": \"$SESSION_ID\", \"ui_status\": \"Archived\", \"sbx_config\": {\"setting\": \"new_value\"}}")
 echo "Update response: $UPDATE_RESPONSE"
 
 if echo "$UPDATE_RESPONSE" | grep -q '"success":true'; then
@@ -129,7 +129,7 @@ READ_RESPONSE2=$(curl -s http://localhost:8000/sessions/$SESSION_ID \
   -H "Authorization: Bearer $ACCESS_TOKEN")
 echo "Read response after update: $READ_RESPONSE2"
 
-if echo "$READ_RESPONSE2" | grep -qi '"session_status":"[Aa]rchived"'; then
+if echo "$READ_RESPONSE2" | grep -qi '"ui_status":"[Aa]rchived"'; then
   echo "✓ Test 5 passed: Update verified"
 else
   echo "✗ Test 5 failed: Update not reflected"
