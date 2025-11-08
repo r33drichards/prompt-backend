@@ -25,12 +25,12 @@ When providing responses that include URLs or links:
 Follow these steps in order:
 1. Make your code changes
 2. Commit with a clear, descriptive message
-3. Push to the feature branch
+3. Push to the feature branch: `{BRANCH}`
 4. **CREATE A PULL REQUEST** using the GitHub CLI (`gh pr create`)
    - Use the title from the session context
    - Include a description of what was changed
-   - Set the base branch to the target branch
-   - Example: `gh pr create --title "Your PR title" --body "Description" --base target-branch --head your-branch`
+   - **IMPORTANT**: Set the base branch to `{TARGET_BRANCH}` (NOT main or master)
+   - Example: `gh pr create --title "Your PR title" --body "Description" --base {TARGET_BRANCH} --head {BRANCH}`
 
 If a pull request already exists for your branch:
 - Simply push your additional commits to the existing PR
@@ -50,11 +50,12 @@ You are working on the following feature branches:
 
 ### Important Instructions:
 
-1. **DEVELOP** all your changes on the designated branch above
+1. **DEVELOP** all your changes on the designated branch above: `{BRANCH}`
 2. **COMMIT** your work with clear, descriptive commit messages
 3. **PUSH** to the specified branch when your changes are complete
 4. **CREATE** the branch locally if it doesn't exist yet
 5. **NEVER** push to a different branch without explicit permission
+6. **TARGET BRANCH**: When creating pull requests, the base/target branch is `{TARGET_BRANCH}`
 
 Remember: All development and final pushes should go to the branches specified above.
 
