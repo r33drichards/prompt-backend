@@ -32,6 +32,7 @@ ip-allocator-client = "0.2.0"
 sandbox-client = { path = "agent-sandbox-sdk" }
 tempfile = "3.8"
 chrono = "0.4"
+toon-format = "0.2.3"
 
 # Pin base64ct to avoid edition 2024 requirement (not yet stable in Rust 1.84)
 [dependencies.base64ct]
