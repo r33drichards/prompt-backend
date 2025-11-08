@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{error, info};
 
-use sandbox_client::types::ShellExecRequest;
-use sandbox_client::types::FileWriteRequest;
 use sandbox_client::types::FileContentEncoding;
+use sandbox_client::types::FileWriteRequest;
+use sandbox_client::types::ShellExecRequest;
 
 use crate::entities::message;
 use crate::entities::message::Entity as Message;
@@ -168,8 +168,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     );
 
     // Fetch and format session history using toon-format
-    let formatted_history: String = get_formatted_session_history(&ctx.db, session_id, prompt_id).await?;
-
+    let formatted_history: String =
+        get_formatted_session_history(&ctx.db, session_id, prompt_id).await?;
 
     // Prepend the formatted history to the current prompt if there is history
     let prompt_content = if !formatted_history.is_empty() {
@@ -219,7 +219,6 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     // Create sandbox client using the api_url
     let sbx = sandbox_client::Client::new(api_url);
 
-
     let uuid = uuid::Uuid::new_v4();
     let prompt_file_path = format!("/home/gem/prompt_{}.md", uuid);
     let prompt_file_path_for_cli = prompt_file_path.clone();
@@ -232,7 +231,9 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         encoding: FileContentEncoding::Utf8,
         leading_newline: false,
         trailing_newline: true,
-    }).await.map_err(|e| {
+    })
+    .await
+    .map_err(|e| {
         error!("Failed to upload formatted history to sandbox: {}", e);
         Error::Failed(Box::new(e))
     })?;
@@ -396,7 +397,6 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             );
             return;
         }
-
 
         // Load system prompt template from embedded markdown file
         const SYSTEM_PROMPT_TEMPLATE: &str =
