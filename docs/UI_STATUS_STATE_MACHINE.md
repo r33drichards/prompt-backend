@@ -11,26 +11,27 @@ stateDiagram-v2
     Pending --> InProgress: Worker Picks Up Task
     InProgress --> NeedsReview: Work Completed
     NeedsReview --> Pending: User Adds New Prompt
-    NeedsReview --> Archived: IP Returned
-    Archived --> [*]
-
+    NeedsReview --> NeedsReviewIpReturned: IP Returned
+    NeedsReviewIpReturned --> [*]
+    
     note right of Pending
         Waiting for a worker
         to pick up the task
 
-        Side Effects:
-        - No sbx_config
-        - No active work
+        Database State:
+        - ui_status = "pending"
+        - sbx_config = NULL
+        - ip_return_retry_count = 0
     end note
 
     note right of InProgress
         Worker is actively
         working on the task
 
-        Side Effects:
-        - IP borrowed from allocator
-        - sbx_config populated
-        - Claude Code CLI running
+        Database State:
+        - ui_status = "in_progress"
+        - sbx_config = {item, borrow_token}
+        - Prompt inbox_status = "active"
     end note
 
     note right of NeedsReview
@@ -38,20 +39,20 @@ stateDiagram-v2
         awaiting review or
         IP return
 
-        Side Effects:
-        - Work output in messages
-        - sbx_config still present
-        - IP not yet returned
+        Database State:
+        - ui_status = "needs_review"
+        - sbx_config = {item, borrow_token}
+        - Messages stored in DB
     end note
 
-    note left of Archived
+    note left of NeedsReviewIpReturned
         Final state after
         IP return
 
-        Side Effects:
-        - sbx_config cleared
-        - IP returned to allocator
-        - retry_count reset to 0
+        Database State:
+        - ui_status = "needs_review_ip_returned"
+        - sbx_config = NULL
+        - ip_return_retry_count = 0
     end note
 ```
 
@@ -62,15 +63,17 @@ stateDiagram-v2
 **Trigger:** User creates a new session via API
 
 **Location:** `src/handlers/sessions.rs`
-- `create()` function (line 153-167)
-- `create_with_prompt()` function (line 228-242)
+- `create()` function (line ~120-170)
+- `create_with_prompt()` function (line ~190-280)
 
-**Side Effects:**
-- Session record created in database
-- `ui_status` set to `Pending`
-- No `sbx_config` (NULL)
-- Branch name generated
-- Title generated (via Anthropic API)
+**Database Changes:**
+- Session record inserted into `session` table
+- `ui_status` = `"pending"`
+- `sbx_config` = `NULL`
+- `ip_return_retry_count` = `0`
+- `branch` = Generated branch name
+- `title` = Generated via Anthropic API
+- `user_id` = From authenticated user
 
 ---
 
@@ -79,20 +82,30 @@ stateDiagram-v2
 **Trigger:** Prompt poller detects pending prompt and borrows IP
 
 **Location:** `src/bg_tasks/prompt_poller.rs`
-- `poll_and_enqueue_prompts()` function (line 82-90)
+- `poll_and_enqueue_prompts()` function (line ~38-127)
 
-**Side Effects:**
-- IP borrowed from allocator
-- `sbx_config` populated with:
-  ```json
-  {
-    "item": { /* borrowed IP details */ },
-    "borrow_token": "token-string"
-  }
-  ```
-- `ui_status` set to `InProgress`
-- Prompt enqueued for processing
-- Prompt `inbox_status` changed from `Pending` to `Active`
+**Database Changes:**
+- **session table UPDATE:**
+  - `ui_status` = `"in_progress"`
+  - `sbx_config` = JSON object with borrowed IP:
+    ```json
+    {
+      "item": {
+        "mcp_json_string": "...",
+        "api_url": "...",
+        ...
+      },
+      "borrow_token": "token-string"
+    }
+    ```
+  - `updated_at` = Current timestamp
+- **prompt table UPDATE:**
+  - `inbox_status` = `"active"` (changed from `"pending"`)
+  - `updated_at` = Current timestamp
+
+**External API Calls:**
+- IP Allocator: `POST /handlers/ip/borrow` - Borrows sandbox IP
+- Job Queue: Prompt enqueued to Apalis PostgreSQL queue
 
 ---
 
@@ -101,14 +114,25 @@ stateDiagram-v2
 **Trigger:** Outbox publisher completes Claude Code CLI execution
 
 **Location:** `src/bg_tasks/outbox_publisher.rs`
-- `process_outbox_job()` function (line 438-460)
+- `process_outbox_job()` function (line ~27-550)
+- State update in spawned async task (line ~430-470)
 
-**Side Effects:**
-- Claude Code CLI process completes
-- All output messages stored in database
-- `ui_status` set to `NeedsReview`
-- `sbx_config` still contains borrowed IP (not yet returned)
-- Session ready for review or IP return
+**Database Changes:**
+- **session table UPDATE:**
+  - `ui_status` = `"needs_review"`
+  - `sbx_config` = UNCHANGED (still contains borrowed IP)
+  - `updated_at` = Current timestamp
+- **message table INSERTs:**
+  - Multiple message records created from Claude Code CLI output
+  - Each message linked to prompt via `prompt_id`
+  - `data` = JSON output from Claude CLI (stream-json format)
+
+**Process Flow:**
+1. Claude Code CLI runs in sandbox (via MCP)
+2. Output streamed and parsed line-by-line as JSON
+3. Each JSON line inserted as message record
+4. On completion, session updated to NeedsReview
+5. IP remains borrowed (poller will handle return)
 
 ---
 
@@ -117,60 +141,79 @@ stateDiagram-v2
 **Trigger:** User adds a new prompt to the session (prompt again)
 
 **Location:** `src/handlers/prompts.rs`
-- `create()` function (line 99-107)
+- `create()` function (line ~79-123)
+- State check and update (line ~95-106)
 
-**Side Effects:**
-- `ui_status` reset to `Pending`
-- New prompt created with `inbox_status = Pending`
-- Existing `sbx_config` retained (will be cleared when new IP borrowed)
-- Session ready for new work cycle
+**Database Changes:**
+- **session table UPDATE:**
+  - `ui_status` = `"pending"` (only if current status is `"needs_review"`)
+  - `sbx_config` = UNCHANGED (will be overwritten when new IP borrowed)
+  - `updated_at` = Current timestamp
+- **prompt table INSERT:**
+  - New prompt record created
+  - `inbox_status` = `"pending"`
+  - `session_id` = Parent session ID
+  - `data` = User's prompt content
 
-**Note:** This transition allows users to iterate on their work by adding follow-up prompts.
+**Note:** This transition allows users to iterate on their work by adding follow-up prompts. The old IP will be replaced when the new prompt is picked up by the poller.
 
 ---
 
-### 5. NeedsReview → Archived
+### 5. NeedsReview → NeedsReviewIpReturned
 
 **Trigger:** IP return poller successfully returns the IP
 
 **Location:** `src/bg_tasks/ip_return_poller.rs`
-- `poll_and_return_ips()` function (line 103-123)
+- `poll_and_return_ips()` function (line ~28-197)
+- Success path (line ~103-123)
 
 **Conditions:**
-- Session has `ui_status = NeedsReview` OR `Archived`
+- Session has `ui_status IN ("needs_review", "archived")`
 - Session has non-null `sbx_config`
 - Not already in dead letter queue
 
-**Side Effects:**
-- IP returned to allocator via API
-- `sbx_config` set to NULL
-- `ui_status` set to `Archived`
-- `ip_return_retry_count` reset to 0
-- Session finalized
+**Database Changes:**
+- **session table UPDATE:**
+  - `ui_status` = `"needs_review_ip_returned"`
+  - `sbx_config` = `NULL` (cleared after successful IP return)
+  - `ip_return_retry_count` = `0` (reset)
+  - `updated_at` = Current timestamp
+
+**External API Calls:**
+- IP Allocator: `POST /handlers/ip/return` - Returns borrowed IP
+  - Request includes `item` and `borrow_token` from sbx_config
 
 **Error Handling:**
-- If IP return fails, `ip_return_retry_count` incremented
-- After 5 failed attempts, session moved to dead letter queue
-- Retry attempts tracked with status updates
+- **On IP return failure:**
+  - `ip_return_retry_count` incremented (not reset)
+  - Session remains in NeedsReview state
+  - `sbx_config` retained for retry
+- **After 5 failed attempts (MAX_RETRY_COUNT):**
+  - Session moved to `dead_letter_queue` table
+  - `ip_return_retry_count` = 5
+  - DLQ entry includes error message and original sbx_config
 
 ---
 
-### 6. Archived → Archived (IP Return on Already Archived)
+### 6. Manual State Updates (via API)
 
-**Trigger:** IP return poller processes archived sessions with remaining sbx_config
+**Trigger:** Administrator manually updates session via API
 
-**Location:** `src/bg_tasks/ip_return_poller.rs`
-- `poll_and_return_ips()` function (line 32-35)
+**Location:** `src/handlers/sessions.rs`
+- `update()` function (line ~340-400)
 
-**Why This Exists:**
-- Handles cases where sessions are manually archived (via API)
-- Ensures IPs are always returned, even if session state changes
-- Prevents IP leaks
+**Database Changes:**
+- **session table UPDATE:**
+  - `ui_status` = Any valid UiStatus value (if provided)
+  - Any other session fields can be updated
+  - `updated_at` = Current timestamp
 
-**Side Effects:**
-- Same as transition #5
-- IP returned to allocator
-- `sbx_config` cleared
+**Use Cases:**
+- Manual intervention for stuck sessions
+- Testing and debugging
+- Administrative operations
+
+**Note:** If a session is manually set to "archived" or any other state while still having a non-null `sbx_config`, the IP return poller will still attempt to return the IP. The poller queries for sessions with `ui_status IN ("needs_review", "archived")` AND `sbx_config IS NOT NULL`, so it will catch manually archived sessions with unreturned IPs.
 
 ---
 
@@ -178,16 +221,84 @@ stateDiagram-v2
 
 | Component | File | Responsibility |
 |-----------|------|----------------|
-| Entity Definition | `src/entities/session.rs` | Defines `UiStatus` enum and session model |
+| Entity Definition | `src/entities/session.rs` | Defines `UiStatus` enum (5 states) and session model |
 | Session Handlers | `src/handlers/sessions.rs` | Creates sessions, handles updates |
 | Prompt Handlers | `src/handlers/prompts.rs` | Creates prompts, triggers Pending transition |
 | Prompt Poller | `src/bg_tasks/prompt_poller.rs` | Transitions Pending → InProgress |
 | Outbox Publisher | `src/bg_tasks/outbox_publisher.rs` | Transitions InProgress → NeedsReview |
-| IP Return Poller | `src/bg_tasks/ip_return_poller.rs` | Transitions NeedsReview → Archived |
+| IP Return Poller | `src/bg_tasks/ip_return_poller.rs` | Transitions NeedsReview → NeedsReviewIpReturned |
+| DLQ Service | `src/services/dead_letter_queue.rs` | Handles failed IP returns |
 
 ---
 
-## Database Migration
+## Database Schema
+
+### UiStatus Enum Values
+
+Defined in `src/entities/session.rs`:
+
+```rust
+pub enum UiStatus {
+    #[sea_orm(string_value = "pending")]
+    Pending,
+    
+    #[sea_orm(string_value = "in_progress")]
+    InProgress,
+    
+    #[sea_orm(string_value = "needs_review")]
+    NeedsReview,
+    
+    #[sea_orm(string_value = "needs_review_ip_returned")]
+    NeedsReviewIpReturned,
+    
+    #[sea_orm(string_value = "archived")]
+    Archived,  // Legacy, may still exist in database
+}
+```
+
+### Session Table Fields
+
+| Field | Type | Nullable | Description |
+|-------|------|----------|-------------|
+| `id` | UUID | No | Primary key |
+| `ui_status` | String(50) | No | Current state (default: "pending") |
+| `sbx_config` | JSONB | Yes | Borrowed IP configuration |
+| `ip_return_retry_count` | Integer | No | Retry attempts for IP return (default: 0) |
+| `parent` | UUID | Yes | Parent session ID |
+| `branch` | String | Yes | Git branch name |
+| `repo` | String | Yes | GitHub repository (owner/name) |
+| `target_branch` | String | Yes | Target branch for PR |
+| `title` | String | Yes | Session title |
+| `user_id` | String | No | Owner user ID |
+| `created_at` | Timestamp | No | Creation timestamp |
+| `updated_at` | Timestamp | No | Last update timestamp |
+| `deleted_at` | Timestamp | Yes | Soft delete timestamp |
+
+### Related Tables
+
+**prompt table:**
+- `id` (UUID): Primary key
+- `session_id` (UUID): Foreign key to session
+- `data` (JSONB): Prompt content
+- `inbox_status` (String): "pending" or "active"
+- `created_at`, `updated_at`: Timestamps
+
+**message table:**
+- `id` (UUID): Primary key
+- `prompt_id` (UUID): Foreign key to prompt
+- `data` (JSONB): Claude Code CLI output
+- `created_at`, `updated_at`: Timestamps
+
+**dead_letter_queue table:**
+- `id` (UUID): Primary key
+- `source` (String): "ip_return_poller"
+- `session_id` (UUID): Related session
+- `retry_count` (Integer): Number of failed attempts
+- `error_message` (Text): Last error
+- `original_data` (JSONB): Original sbx_config
+- `created_at`, `updated_at`: Timestamps
+
+## Database Migrations
 
 The `ui_status` field was added via migration:
 - **File:** `migration/src/m20251107_000004_add_ui_status_to_session.rs`
