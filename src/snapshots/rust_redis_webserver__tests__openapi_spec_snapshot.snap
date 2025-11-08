@@ -1170,6 +1170,7 @@ expression: spec
           "Pending",
           "InProgress",
           "NeedsReview",
+          "NeedsReviewIpReturned",
           "Archived"
         ]
       },
