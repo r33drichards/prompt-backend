@@ -301,16 +301,22 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             .replace("{BRANCH}", &branch_clone);
 
         // Spawn the Claude CLI process with piped stdout/stderr for streaming
+        // First try with --resume, then fallback to --session if not found
         let _ = tokio::task::spawn_blocking(move || {
             use std::io::{BufRead, BufReader};
             use std::process::{Command, Stdio};
+            use std::sync::mpsc;
 
-            let child = Command::new("claude")
-                .args([
+            // Helper function to build Claude Code command
+            let build_command = |session_arg: &str| -> Command {
+                let mut cmd = Command::new("npx");
+                cmd.args([
+                    "-y",
+                    "@anthropic-ai/claude-code",
                     "--dangerously-skip-permissions",
                     "--print",
                     "--output-format=stream-json",
-                    "--session-id",
+                    session_arg,
                     &session_id.to_string(),
                     "--allowedTools",
                     "WebSearch",
@@ -339,39 +345,108 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                 ])
                 .current_dir(temp_dir.path())
                 .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn();
+                .stderr(Stdio::piped());
+                cmd
+            };
 
-            let mut child = match child {
+            // First attempt: try with --resume
+            info!("Attempting to resume Claude Code session {}", session_id);
+            let mut child = match build_command("--resume").spawn() {
                 Ok(c) => c,
                 Err(e) => {
-                    error!("Failed to spawn Claude CLI for session {}: {}", session_id, e);
-                    return Err(e);
+                    error!("Failed to spawn with --resume, trying --session: {}", e);
+                    match build_command("--session").spawn() {
+                        Ok(c) => c,
+                        Err(e) => {
+                            error!("Failed to spawn Claude CLI with --session for session {}: {}", session_id, e);
+                            return Err(e);
+                        }
+                    }
                 }
             };
 
-            // Take stdout and stderr handles
-            let stdout = child.stdout.take().expect("Failed to capture stdout");
+            // Take stderr to check for "No conversation found" error
             let stderr = child.stderr.take().expect("Failed to capture stderr");
+            let stdout = child.stdout.take().expect("Failed to capture stdout");
 
-            // Spawn a thread to handle stderr
-            let session_id_clone = session_id;
-            std::thread::spawn(move || {
+            // Create a channel to signal if we need to restart with --session
+            let (restart_tx, restart_rx) = mpsc::channel();
+            let session_id_for_stderr = session_id;
+
+            // Spawn thread to monitor stderr for "No conversation found" error
+            let stderr_handle = std::thread::spawn(move || {
                 let stderr_reader = BufReader::new(stderr);
+                let mut stderr_lines = Vec::new();
                 for (i, line) in stderr_reader.lines().enumerate() {
                     match line {
                         Ok(line) => {
-                            error!("Claude Code stderr[{}] for session {}: {}", i, session_id_clone, line);
+                            // Check first few lines for the "No conversation found" error
+                            if i < 5 && line.contains("No conversation found with session ID") {
+                                info!("Detected 'No conversation found' error for session {}, will restart with --session", session_id_for_stderr);
+                                let _ = restart_tx.send((true, stderr_lines));
+                                return;
+                            }
+                            if i < 5 {
+                                stderr_lines.push(line.clone());
+                            }
+                            error!("Claude Code stderr[{}] for session {}: {}", i, session_id_for_stderr, line);
                         }
                         Err(e) => {
-                            error!("Error reading stderr for session {}: {}", session_id_clone, e);
+                            error!("Error reading stderr for session {}: {}", session_id_for_stderr, e);
                             break;
                         }
                     }
                 }
+                let _ = restart_tx.send((false, stderr_lines));
             });
 
-            // Read stdout line by line and send to channel
+            // Give it a moment to check stderr
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+
+            // Check if we need to restart
+            let (mut child, stdout) = if let Ok((should_restart, _stderr_lines)) = restart_rx.try_recv() {
+                if should_restart {
+                    info!("Killing --resume process and restarting with --session for session {}", session_id);
+                    let _ = child.kill();
+                    let _ = stderr_handle.join();
+
+                    match build_command("--session").spawn() {
+                        Ok(mut c) => {
+                            let new_stdout = c.stdout.take().expect("Failed to capture stdout");
+                            let new_stderr = c.stderr.take().expect("Failed to capture stderr");
+
+                            // Spawn new stderr handler
+                            let session_id_clone = session_id;
+                            std::thread::spawn(move || {
+                                let stderr_reader = BufReader::new(new_stderr);
+                                for (i, line) in stderr_reader.lines().enumerate() {
+                                    match line {
+                                        Ok(line) => {
+                                            error!("Claude Code stderr[{}] for session {}: {}", i, session_id_clone, line);
+                                        }
+                                        Err(e) => {
+                                            error!("Error reading stderr for session {}: {}", session_id_clone, e);
+                                            break;
+                                        }
+                                    }
+                                }
+                            });
+
+                            (c, new_stdout)
+                        }
+                        Err(e) => {
+                            error!("Failed to spawn Claude CLI with --session for session {}: {}", session_id, e);
+                            return Err(e);
+                        }
+                    }
+                } else {
+                    (child, stdout)
+                }
+            } else {
+                (child, stdout)
+            };
+
+            // Read stdout line by line and send to database
             let stdout_reader = BufReader::new(stdout);
             let mut line_count = 0;
 
