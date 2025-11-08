@@ -94,10 +94,7 @@ async fn poll_and_enqueue_prompts(
         active_session.ui_status = Set(UiStatus::InProgress);
         active_session.update(db).await?;
 
-        info!(
-            "Updated session {} sbx_config with borrowed IP",
-            session_id
-        );
+        info!("Updated session {} sbx_config with borrowed IP", session_id);
 
         // Enqueue each prompt for this session
         for prompt in prompts {
