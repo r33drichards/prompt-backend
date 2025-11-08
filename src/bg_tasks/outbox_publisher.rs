@@ -1,11 +1,16 @@
 use apalis::prelude::*;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, NotSet, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, NotSet, Order, QueryFilter,
+    QueryOrder, Set,
+};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tracing::{error, info};
 
 use sandbox_client::types::ShellExecRequest;
 
 use crate::entities::message;
+use crate::entities::message::Entity as Message;
 use crate::entities::prompt::Entity as Prompt;
 use crate::entities::session::{Entity as Session, UiStatus};
 
@@ -24,6 +29,77 @@ impl Job for OutboxJob {
 #[derive(Clone)]
 pub struct OutboxContext {
     pub db: DatabaseConnection,
+}
+
+/// Fetch all previous prompts in the session and format them using toon-format
+async fn get_formatted_session_history(
+    db: &DatabaseConnection,
+    session_id: uuid::Uuid,
+    current_prompt_id: uuid::Uuid,
+) -> Result<String, Error> {
+    // Fetch all prompts for this session, excluding the current prompt, ordered by creation time
+    let prompts = Prompt::find()
+        .filter(crate::entities::prompt::Column::SessionId.eq(session_id))
+        .filter(crate::entities::prompt::Column::Id.ne(current_prompt_id))
+        .order_by(crate::entities::prompt::Column::CreatedAt, Order::Asc)
+        .all(db)
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch prompts for session {}: {}", session_id, e);
+            Error::Failed(Box::new(e))
+        })?;
+
+    if prompts.is_empty() {
+        info!("No previous prompts found for session {}", session_id);
+        return Ok(String::new());
+    }
+
+    info!(
+        "Found {} previous prompts for session {}",
+        prompts.len(),
+        session_id
+    );
+
+    // Build the session history structure
+    let mut session_data = Vec::new();
+
+    for prompt in prompts {
+        // Fetch messages for this prompt
+        let messages = Message::find()
+            .filter(crate::entities::message::Column::PromptId.eq(prompt.id))
+            .order_by(crate::entities::message::Column::CreatedAt, Order::Asc)
+            .all(db)
+            .await
+            .map_err(|e| {
+                error!("Failed to fetch messages for prompt {}: {}", prompt.id, e);
+                Error::Failed(Box::new(e))
+            })?;
+
+        let mut messages_data = Vec::new();
+        for message in messages {
+            messages_data.push(message.data);
+        }
+
+        session_data.push(json!({
+            "prompt_id": prompt.id.to_string(),
+            "prompt_data": prompt.data,
+            "messages": messages_data,
+        }));
+    }
+
+    // Create the final JSON structure
+    let history_json = json!({
+        "session_id": session_id.to_string(),
+        "previous_prompts": session_data,
+    });
+
+    // Use toon-format to encode the history
+    let formatted_history = toon_format::encode_default(&history_json).map_err(|e| {
+        error!("Failed to format session history with toon-format: {}", e);
+        Error::Failed(format!("Toon format error: {}", e).into())
+    })?;
+
+    Ok(formatted_history)
 }
 
 /// Process an outbox job: read prompt by ID, get related session, set up sandbox, and run Claude Code
@@ -88,6 +164,24 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         "Extracted prompt content (first 100 chars): {}",
         prompt_content.chars().take(100).collect::<String>()
     );
+
+    // Fetch and format session history using toon-format
+    let formatted_history = get_formatted_session_history(&ctx.db, session_id, prompt_id).await?;
+
+    // Prepend the formatted history to the current prompt if there is history
+    let prompt_content = if !formatted_history.is_empty() {
+        info!(
+            "Prepending formatted session history ({} chars)",
+            formatted_history.len()
+        );
+        format!(
+            "# Previous Session History\n\n{}\n\n# Current Prompt\n\n{}",
+            formatted_history, prompt_content
+        )
+    } else {
+        info!("No previous session history to prepend");
+        prompt_content
+    };
 
     // Read borrowed IP from session's sbx_config (already allocated by prompt_poller)
     let borrowed_ip_json = _session_model.sbx_config.as_ref().ok_or_else(|| {
