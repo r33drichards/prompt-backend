@@ -10,7 +10,7 @@ use sea_orm::{
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedUser;
-use crate::entities::prompt::{self, Entity as Prompt, InboxStatus, Model as PromptModel};
+use crate::entities::prompt::{self, Entity as Prompt, Model as PromptModel};
 use crate::entities::session::{self, Entity as Session, UiStatus};
 use crate::error::{Error, OResult};
 
@@ -32,7 +32,6 @@ pub struct PromptDto {
     pub id: String,
     pub session_id: String,
     pub data: serde_json::Value,
-    pub inbox_status: InboxStatus,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -43,7 +42,6 @@ impl From<PromptModel> for PromptDto {
             id: model.id.to_string(),
             session_id: model.session_id.to_string(),
             data: model.data.clone(),
-            inbox_status: model.inbox_status,
             created_at: model.created_at.to_string(),
             updated_at: model.updated_at.to_string(),
         }
@@ -114,7 +112,6 @@ pub async fn create(
         id: Set(id),
         session_id: Set(session_id),
         data: Set(input.data.clone()),
-        inbox_status: Set(InboxStatus::Pending),
         created_at: NotSet,
         updated_at: NotSet,
     };

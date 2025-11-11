@@ -1309,7 +1309,6 @@ expression: spec
           "created_at",
           "data",
           "id",
-          "inbox_status",
           "session_id",
           "updated_at"
         ],
@@ -1321,9 +1320,6 @@ expression: spec
             "type": "string"
           },
           "data": {},
-          "inbox_status": {
-            "$ref": "#/components/schemas/InboxStatus"
-          },
           "created_at": {
             "type": "string"
           },
@@ -1331,15 +1327,6 @@ expression: spec
             "type": "string"
           }
         }
-      },
-      "InboxStatus": {
-        "type": "string",
-        "enum": [
-          "Pending",
-          "Active",
-          "Completed",
-          "Archived"
-        ]
       },
       "ListPromptsOutput": {
         "type": "object",

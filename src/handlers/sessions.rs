@@ -10,7 +10,7 @@ use sea_orm::{
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedUser;
-use crate::entities::prompt::{self, InboxStatus};
+use crate::entities::prompt;
 use crate::entities::session::{self, Entity as Session, Model as SessionModel, UiStatus};
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
@@ -252,7 +252,6 @@ pub async fn create_with_prompt(
         id: Set(prompt_id),
         session_id: Set(session_id),
         data: Set(input.messages.clone()),
-        inbox_status: Set(InboxStatus::Pending),
         created_at: NotSet,
         updated_at: NotSet,
     };
