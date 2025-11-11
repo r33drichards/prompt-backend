@@ -28,6 +28,12 @@ pub struct Model {
     pub user_id: String,
     #[sea_orm(default_value = 0)]
     pub ip_return_retry_count: i32,
+    #[sea_orm(nullable)]
+    pub cancellation_status: Option<CancellationStatus>,
+    #[sea_orm(nullable)]
+    pub cancelled_at: Option<DateTimeWithTimeZone>,
+    #[sea_orm(nullable)]
+    pub cancelled_by: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -59,4 +65,15 @@ pub enum UiStatus {
     NeedsReviewIpReturned,
     #[sea_orm(string_value = "archived")]
     Archived,
+}
+
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumIter, DeriveActiveEnum, JsonSchema,
+)]
+#[sea_orm(rs_type = "String", db_type = "String(Some(50))")]
+pub enum CancellationStatus {
+    #[sea_orm(string_value = "requested")]
+    Requested,
+    #[sea_orm(string_value = "cancelled")]
+    Cancelled,
 }

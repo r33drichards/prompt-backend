@@ -11,9 +11,12 @@ use uuid::Uuid;
 
 use crate::auth::AuthenticatedUser;
 use crate::entities::prompt;
-use crate::entities::session::{self, Entity as Session, Model as SessionModel, UiStatus};
+use crate::entities::session::{
+    self, CancellationStatus, Entity as Session, Model as SessionModel, UiStatus,
+};
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
+use chrono::Utc;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct CreateSessionInput {
@@ -47,6 +50,7 @@ pub struct CreateSessionWithPromptOutput {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionDto {
     pub id: String,
     pub sbx_config: Option<serde_json::Value>,
@@ -59,6 +63,9 @@ pub struct SessionDto {
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
+    pub cancellation_status: Option<CancellationStatus>,
+    pub cancelled_at: Option<String>,
+    pub cancelled_by: Option<String>,
 }
 
 impl From<SessionModel> for SessionDto {
@@ -75,6 +82,9 @@ impl From<SessionModel> for SessionDto {
             created_at: model.created_at.to_string(),
             updated_at: model.updated_at.to_string(),
             deleted_at: model.deleted_at.map(|d| d.to_string()),
+            cancellation_status: model.cancellation_status,
+            cancelled_at: model.cancelled_at.map(|d| d.to_string()),
+            cancelled_by: model.cancelled_by,
         }
     }
 }
@@ -109,6 +119,12 @@ pub struct UpdateSessionOutput {
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct DeleteSessionOutput {
+    pub success: bool,
+    pub message: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Clone)]
+pub struct CancelSessionOutput {
     pub success: bool,
     pub message: String,
 }
@@ -164,6 +180,9 @@ pub async fn create(
         created_at: NotSet,
         updated_at: NotSet,
         deleted_at: Set(None),
+        cancellation_status: Set(None),
+        cancelled_at: Set(None),
+        cancelled_by: Set(None),
     };
 
     match new_session.insert(db.inner()).await {
@@ -238,6 +257,9 @@ pub async fn create_with_prompt(
         created_at: NotSet,
         updated_at: NotSet,
         deleted_at: Set(None),
+        cancellation_status: Set(None),
+        cancelled_at: Set(None),
+        cancelled_by: Set(None),
     };
 
     // Insert the session
@@ -400,6 +422,48 @@ pub async fn delete(
         Ok(_) => Ok(Json(DeleteSessionOutput {
             success: true,
             message: "Session deleted successfully".to_string(),
+        })),
+        Err(e) => Err(Error::database_error(e.to_string())),
+    }
+}
+
+/// Cancel a session by ID
+#[openapi]
+#[post("/sessions/<id>/cancel")]
+pub async fn cancel(
+    user: AuthenticatedUser,
+    db: &State<DatabaseConnection>,
+    id: String,
+) -> OResult<CancelSessionOutput> {
+    let uuid =
+        Uuid::parse_str(&id).map_err(|_| Error::bad_request("Invalid UUID format".to_string()))?;
+
+    // Verify session exists and belongs to user
+    let existing_session = Session::find_by_id(uuid)
+        .filter(session::Column::UserId.eq(&user.user_id))
+        .one(db.inner())
+        .await
+        .map_err(|e| Error::database_error(e.to_string()))?
+        .ok_or_else(|| Error::not_found("Session not found".to_string()))?;
+
+    // Check if already cancelled
+    if let Some(CancellationStatus::Cancelled) = existing_session.cancellation_status {
+        return Ok(Json(CancelSessionOutput {
+            success: true,
+            message: "Session is already cancelled".to_string(),
+        }));
+    }
+
+    // Update session to mark as cancellation requested
+    let mut active_session: session::ActiveModel = existing_session.into();
+    active_session.cancellation_status = Set(Some(CancellationStatus::Requested));
+    active_session.cancelled_at = Set(Some(Utc::now().into()));
+    active_session.cancelled_by = Set(Some(user.user_id.clone()));
+
+    match active_session.update(db.inner()).await {
+        Ok(_) => Ok(Json(CancelSessionOutput {
+            success: true,
+            message: "Session cancellation requested successfully".to_string(),
         })),
         Err(e) => Err(Error::database_error(e.to_string())),
     }

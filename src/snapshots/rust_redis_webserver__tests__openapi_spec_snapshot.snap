@@ -293,6 +293,51 @@ expression: spec
         ]
       }
     },
+    "/sessions/{id}/cancel": {
+      "post": {
+        "description": "Cancel a session by ID",
+        "operationId": "handlers_sessions_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelSessionOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "# [400 Bad Request](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400)\nThe request given is wrongly formatted or data asked could not be fulfilled. "
+          },
+          "404": {
+            "description": "# [404 Not Found](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404)\nThis response is given when you request a page that does not exists."
+          },
+          "422": {
+            "description": "# [422 Unprocessable Entity](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/422)\nThis response is given when you request body is not correctly formatted. "
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when something wend wrong on the server. "
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
     "/prompts": {
       "post": {
         "description": "Create a new prompt",
@@ -1117,16 +1162,16 @@ expression: spec
       "SessionDto": {
         "type": "object",
         "required": [
-          "created_at",
+          "createdAt",
           "id",
-          "ui_status",
-          "updated_at"
+          "uiStatus",
+          "updatedAt"
         ],
         "properties": {
           "id": {
             "type": "string"
           },
-          "sbx_config": {
+          "sbxConfig": {
             "nullable": true
           },
           "parent": {
@@ -1141,7 +1186,7 @@ expression: spec
             "type": "string",
             "nullable": true
           },
-          "target_branch": {
+          "targetBranch": {
             "type": "string",
             "nullable": true
           },
@@ -1149,16 +1194,32 @@ expression: spec
             "type": "string",
             "nullable": true
           },
-          "ui_status": {
+          "uiStatus": {
             "$ref": "#/components/schemas/UiStatus"
           },
-          "created_at": {
+          "createdAt": {
             "type": "string"
           },
-          "updated_at": {
+          "updatedAt": {
             "type": "string"
           },
-          "deleted_at": {
+          "deletedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "cancellationStatus": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CancellationStatus"
+              }
+            ],
+            "nullable": true
+          },
+          "cancelledAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "cancelledBy": {
             "type": "string",
             "nullable": true
           }
@@ -1172,6 +1233,13 @@ expression: spec
           "NeedsReview",
           "NeedsReviewIpReturned",
           "Archived"
+        ]
+      },
+      "CancellationStatus": {
+        "type": "string",
+        "enum": [
+          "Requested",
+          "Cancelled"
         ]
       },
       "ListSessionsOutput": {
@@ -1246,6 +1314,21 @@ expression: spec
         }
       },
       "DeleteSessionOutput": {
+        "type": "object",
+        "required": [
+          "message",
+          "success"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "CancelSessionOutput": {
         "type": "object",
         "required": [
           "message",

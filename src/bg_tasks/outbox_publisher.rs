@@ -14,7 +14,7 @@ use sandbox_client::types::ShellExecRequest;
 use crate::entities::message;
 use crate::entities::message::Entity as Message;
 use crate::entities::prompt::Entity as Prompt;
-use crate::entities::session::{Entity as Session, UiStatus};
+use crate::entities::session::{CancellationStatus, Entity as Session, UiStatus};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +140,30 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             error!("Session {} not found", session_id);
             Error::Failed("Session not found".into())
         })?;
+
+    // Check if session has cancellation requested
+    if let Some(CancellationStatus::Requested) = _session_model.cancellation_status {
+        info!(
+            "Session {} has cancellation requested - marking as cancelled and skipping processing",
+            session_id
+        );
+
+        // Update session to mark as cancelled
+        let mut active_session: crate::entities::session::ActiveModel = _session_model.into();
+        active_session.cancellation_status = Set(Some(CancellationStatus::Cancelled));
+        active_session.ui_status = Set(UiStatus::NeedsReview);
+
+        active_session.update(&ctx.db).await.map_err(|e| {
+            error!(
+                "Failed to update session {} to cancelled status: {}",
+                session_id, e
+            );
+            Error::Failed(Box::new(e))
+        })?;
+
+        info!("Session {} marked as cancelled", session_id);
+        return Ok(());
+    }
 
     info!("Processing prompt {} for session {}", prompt_id, session_id);
 

@@ -17,6 +17,7 @@ mod m20251107_000003_add_ip_return_retry_count_to_session;
 mod m20251107_000004_add_ui_status_to_session;
 mod m20251107_000005_drop_session_status_fields;
 mod m20251108_000001_drop_inbox_status_from_prompt;
+mod m20251111_000001_add_cancellation_to_session;
 
 pub struct Migrator;
 
@@ -41,6 +42,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20251107_000004_add_ui_status_to_session::Migration),
             Box::new(m20251107_000005_drop_session_status_fields::Migration),
             Box::new(m20251108_000001_drop_inbox_status_from_prompt::Migration),
+            Box::new(m20251111_000001_add_cancellation_to_session::Migration),
         ]
     }
 }
