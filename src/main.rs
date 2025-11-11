@@ -150,6 +150,19 @@ async fn main() -> anyhow::Result<()> {
         });
 
         handles.push(ip_return_handle);
+
+        // Spawn cancellation enforcer
+        let cancellation_database_url = database_url.clone();
+        let cancellation_handle = tokio::spawn(async move {
+            info!("Starting cancellation enforcer");
+
+            // Create SeaORM database connection for the enforcer
+            let db = establish_connection(&cancellation_database_url).await?;
+
+            bg_tasks::cancellation_enforcer::run_cancellation_enforcer(db).await
+        });
+
+        handles.push(cancellation_handle);
     }
 
     // If no services specified, error out

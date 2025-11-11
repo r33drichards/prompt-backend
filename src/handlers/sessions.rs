@@ -183,6 +183,7 @@ pub async fn create(
         cancellation_status: Set(None),
         cancelled_at: Set(None),
         cancelled_by: Set(None),
+        process_pid: Set(None),
     };
 
     match new_session.insert(db.inner()).await {
@@ -260,6 +261,7 @@ pub async fn create_with_prompt(
         cancellation_status: Set(None),
         cancelled_at: Set(None),
         cancelled_by: Set(None),
+        process_pid: Set(None),
     };
 
     // Insert the session

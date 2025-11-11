@@ -34,6 +34,8 @@ pub struct Model {
     pub cancelled_at: Option<DateTimeWithTimeZone>,
     #[sea_orm(nullable)]
     pub cancelled_by: Option<String>,
+    #[sea_orm(nullable)]
+    pub process_pid: Option<i32>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

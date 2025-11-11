@@ -1,3 +1,4 @@
+pub mod cancellation_enforcer;
 pub mod ip_return_poller;
 pub mod outbox_publisher;
 pub mod prompt_poller;
