@@ -32,6 +32,11 @@ pub async fn generate_session_title(
     let api_key = env::var("ANTHROPIC_API_KEY")
         .map_err(|_| "ANTHROPIC_API_KEY not set in environment".to_string())?;
 
+    // Build context from available information
+    let mut context_parts = Vec::new();
+    context_parts.push(format!("Prompt: {}", prompt));
+    let context = context_parts.join("\n");
+
     let user_message = format!(
         "Generate a specific, descriptive title (max 60 characters) for a coding task.\n\nUser's request: {}\n\nIMPORTANT RULES:\n1. Extract the CORE TASK from the user's prompt - what specific thing are they asking for?\n2. Start with an action verb: Improve, Fix, Add, Implement, Refactor, Update, Remove, etc.\n3. Include the specific component/feature being modified\n4. NEVER use generic phrases like \"Code Session\", \"Update Master Branch\", \"Work on [repo name]\"\n5. If the request is vague, make your best guess about the specific work being done\n\nGOOD title examples:\n- User says \"the auto title generation could use some improvement\" → \"Improve Auto Title Generation Prompt\"\n- User says \"fix the memory leak\" → \"Fix Memory Leak in Session Handler\"\n- User says \"add authentication\" → \"Implement User Authentication\"\n- User says \"refactor the database code\" → \"Refactor Database Connection Layer\"\n\nBAD title examples (NEVER generate these):\n- \"Prompt-Backend Code Session: Update Master Branch\" ❌ Too generic\n- \"Update Code\" ❌ Not specific\n- \"Code Session\" ❌ Meaningless\n- \"Work on Repository\" ❌ Too vague\n\nRepository context: {}\nTarget branch: {}\n\nRespond with ONLY the title, nothing else. Make it specific to the actual task!",
         prompt,
