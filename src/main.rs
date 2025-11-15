@@ -266,6 +266,7 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
             ],
         )
         .mount("/", routes![handlers::metrics::metrics])
+        .mount("/", rocket_cors::catch_all_options_routes())
         .mount(
             "/swagger-ui/",
             make_swagger_ui(&SwaggerUIConfig {
