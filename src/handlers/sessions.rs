@@ -14,15 +14,27 @@ use crate::entities::prompt;
 use crate::entities::session::{
     self, CancellationStatus, Entity as Session, Model as SessionModel, UiStatus,
 };
+use crate::entities::session_repository;
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
 use chrono::Utc;
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
-pub struct CreateSessionInput {
-    pub parent: Option<String>,
+pub struct RepositoryInput {
     pub repo: String,
     pub target_branch: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Clone)]
+pub struct CreateSessionInput {
+    pub parent: Option<String>,
+    // Support both single repo (backward compatibility) and multiple repos
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_branch: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repositories: Option<Vec<RepositoryInput>>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -34,8 +46,13 @@ pub struct CreateSessionOutput {
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct CreateSessionWithPromptInput {
-    pub repo: String,
-    pub target_branch: String,
+    // Support both single repo (backward compatibility) and multiple repos
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_branch: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repositories: Option<Vec<RepositoryInput>>,
     pub messages: serde_json::Value,
     pub parent_id: Option<String>,
 }
@@ -51,13 +68,25 @@ pub struct CreateSessionWithPromptOutput {
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct RepositoryDto {
+    pub id: String,
+    pub repo: String,
+    pub target_branch: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionDto {
     pub id: String,
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
     pub branch: Option<String>,
+    // Keep for backward compatibility
     pub repo: Option<String>,
     pub target_branch: Option<String>,
+    // New field for multiple repositories
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repositories: Option<Vec<RepositoryDto>>,
     pub title: Option<String>,
     pub ui_status: UiStatus,
     pub created_at: String,
