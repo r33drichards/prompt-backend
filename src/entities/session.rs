@@ -42,11 +42,19 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::prompt::Entity")]
     Prompt,
+    #[sea_orm(has_many = "super::session_repository::Entity")]
+    SessionRepository,
 }
 
 impl Related<super::prompt::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Prompt.def()
+    }
+}
+
+impl Related<super::session_repository::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::SessionRepository.def()
     }
 }
 
