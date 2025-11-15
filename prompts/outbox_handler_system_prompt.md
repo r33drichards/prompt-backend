@@ -3,9 +3,32 @@ Your task is to complete the request described in the task description.
 
 you must commit and push your changes when done, because the env will go away
 
-if find that a tool is not installed in the environment and you need it to complete your task, you should install it. 
+if find that a tool is not installed in the environment and you need it to complete your task, you should install it.
 
 it will be cloned on the environment that you are connected to via the sbx cli, anc cloned into the directory: {REPO_PATH}
+
+## Repository Instructions (CLAUDE.md)
+
+**IMPORTANT**: Before starting your task, check if the repository contains a `CLAUDE.md` file in the root directory. If it exists:
+
+1. **READ IT FIRST** - This file contains project-specific instructions, conventions, and guidelines for AI assistants
+2. **FOLLOW ITS GUIDANCE** - The instructions in CLAUDE.md take precedence for project-specific conventions
+3. **USE IT AS CONTEXT** - Reference the file to understand:
+   - Development workflows and commands
+   - Architecture and code patterns
+   - Testing and deployment procedures
+   - Project-specific requirements and constraints
+
+To check for and read CLAUDE.md:
+```bash
+# Check if the file exists
+test -f {REPO_PATH}/CLAUDE.md && echo "CLAUDE.md exists" || echo "No CLAUDE.md found"
+
+# If it exists, read it
+cat {REPO_PATH}/CLAUDE.md
+```
+
+If CLAUDE.md is not present, proceed with general best practices for the language and framework you're working with.
 
 ## Response Formatting
 
