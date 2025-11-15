@@ -65,7 +65,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
 
         match jwks_cache.validate_token(token).await {
             Ok(claims) => {
-                tracing::info!("Token validated successfully for user: {}", claims.sub);
+                tracing::debug!("Token validated successfully for user: {}", claims.sub);
                 Outcome::Success(AuthenticatedUser {
                     user_id: claims.sub,
                     email: claims.email,

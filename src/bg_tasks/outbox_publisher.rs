@@ -186,27 +186,17 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         _ => serde_json::to_string(&prompt_model.data).unwrap_or_default(),
     };
 
-    info!(
-        "Extracted prompt content (first 100 chars): {}",
-        prompt_content.chars().take(100).collect::<String>()
-    );
-
     // Fetch and format session history using toon-format
     let formatted_history: String =
         get_formatted_session_history(&ctx.db, session_id, prompt_id).await?;
 
     // Prepend the formatted history to the current prompt if there is history
     let prompt_content = if !formatted_history.is_empty() {
-        info!(
-            "Prepending formatted session history ({} chars)",
-            formatted_history.len()
-        );
         format!(
             "# Previous Session History\n\n{}\n\n# Current Prompt\n\n{}",
             formatted_history, prompt_content
         )
     } else {
-        info!("No previous session history to prepend");
         prompt_content
     };
 
@@ -219,8 +209,6 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         Error::Failed("Session missing sbx_config".into())
     })?;
 
-    info!("Using pre-allocated sandbox from session sbx_config");
-
     // Parse the sbx_config JSON to extract mcp_json_string and api_url
     // Note: The data is nested under "item" key from prompt_poller
     let item = borrowed_ip_json["item"]
@@ -232,13 +220,9 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         .ok_or_else(|| Error::Failed("Missing mcp_json_string in sbx_config.item".into()))?
         .to_string();
 
-    info!("Sandbox mcp_json_string: {}", mcp_json_string);
-
     let api_url = item["api_url"]
         .as_str()
         .ok_or_else(|| Error::Failed("Missing api_url in sbx_config.item".into()))?;
-
-    info!("Sandbox api_url: {}", api_url);
 
     // Create sandbox client using the api_url
     let sbx = sandbox_client::Client::new(api_url);
@@ -263,8 +247,6 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     })?;
 
     // Read GitHub token from environment variable
-    info!("Reading GitHub token from environment variable");
-
     let github_token = std::env::var("GITHUB_TOKEN").map_err(|e| {
         error!("Failed to read GITHUB_TOKEN from environment: {}", e);
         Error::Failed(Box::new(std::io::Error::new(
@@ -273,13 +255,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         )))
     })?;
 
-    info!("Successfully read GitHub token from environment");
-
     // Authenticate with GitHub using the fetched token
-    info!(
-        "Authenticating with GitHub for session {}",
-        _session_model.id
-    );
 
     // Pass the token to gh auth login via stdin
     let auth_command = format!("echo '{}' | gh auth login --with-token", github_token);
@@ -535,10 +511,11 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         let session_id_for_stderr = session_id_clone;
         std::thread::spawn(move || {
             let stderr_reader = BufReader::new(stderr);
-            for (i, line) in stderr_reader.lines().enumerate() {
+            let mut stderr_lines = Vec::new();
+            for line in stderr_reader.lines() {
                 match line {
                     Ok(line) => {
-                        error!("Claude Code stderr[{}] for session {}: {}", i, session_id_for_stderr, line);
+                        stderr_lines.push(line);
                     }
                     Err(e) => {
                         error!("Error reading stderr for session {}: {}", session_id_for_stderr, e);
@@ -546,11 +523,21 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     }
                 }
             }
+            if !stderr_lines.is_empty() {
+                error!("Claude Code stderr for session {} ({} lines total). First/last lines: [{} ... {}]",
+                    session_id_for_stderr,
+                    stderr_lines.len(),
+                    stderr_lines.first().unwrap_or(&String::new()),
+                    stderr_lines.last().unwrap_or(&String::new())
+                );
+            }
         });
 
         // Read stdout line by line and send to channel
         let stdout_reader = BufReader::new(stdout);
         let mut line_count = 0;
+        let mut message_count = 0;
+        let mut error_count = 0;
 
         for line in stdout_reader.lines() {
             match line {
@@ -561,8 +548,6 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                     if line.trim().is_empty() {
                         continue;
                     }
-
-                    info!("Claude Code output line {} for session {}: {}", line_count, session_id_clone, line);
 
                     // Parse JSON and insert into database
                     match serde_json::from_str::<serde_json::Value>(&line) {
@@ -583,15 +568,20 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                                 new_message.insert(&db_clone2).await
                             }) {
                                 Ok(_) => {
-                                    info!("Created message {} for prompt {} in session {}", message_id, prompt_id_clone, session_id_clone);
+                                    message_count += 1;
                                 }
                                 Err(e) => {
-                                    error!("Failed to create message {} for prompt {} in session {}: {}", message_id, prompt_id_clone, session_id_clone, e);
+                                    error_count += 1;
+                                    error!("Failed to create message for session {}: {}", session_id_clone, e);
                                 }
                             }
                         }
                         Err(e) => {
-                            error!("Failed to parse JSON at line {} for session {}: {}. Line content: {}", line_count, session_id_clone, e, line);
+                            error_count += 1;
+                            // Only log first few parse errors to avoid spam
+                            if error_count <= 3 {
+                                error!("Failed to parse JSON at line {} for session {}: {}", line_count, session_id_clone, e);
+                            }
                         }
                     }
                 }
@@ -602,7 +592,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             }
         }
 
-        info!("Processed {} lines of output for session {}", line_count, session_id_clone);
+        info!("Processed {} lines of output for session {} ({} messages created, {} errors)", line_count, session_id_clone, message_count, error_count);
 
         // Wait for process to complete and get exit status
         let status = child.wait()?;
