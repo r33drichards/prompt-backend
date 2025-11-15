@@ -126,6 +126,26 @@ async fn enforce_cancellations(db: &DatabaseConnection) -> anyhow::Result<usize>
                     "Failed to execute kill command for process {} (session {}): {}",
                     pid, session_id, e
                 );
+
+                // Clear the PID anyway since the command failed (process likely doesn't exist)
+                // This prevents infinite retry loops
+                let mut active_session: session::ActiveModel = session_model.into();
+                active_session.cancellation_status = Set(Some(CancellationStatus::Cancelled));
+                active_session.ui_status = Set(UiStatus::NeedsReview);
+                active_session.process_pid = Set(None);
+
+                if let Err(update_err) = active_session.update(db).await {
+                    error!(
+                        "Failed to update session {} after kill command error: {}",
+                        session_id, update_err
+                    );
+                } else {
+                    info!(
+                        "Session {} marked as cancelled (kill command failed, process likely gone)",
+                        session_id
+                    );
+                }
+                count += 1;
             }
         }
     }
