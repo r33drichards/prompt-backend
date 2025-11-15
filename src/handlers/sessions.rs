@@ -390,6 +390,9 @@ pub async fn update(
         active_session.ui_status = Set(ui_status.clone());
     }
 
+    // Explicitly update the updated_at timestamp
+    active_session.updated_at = Set(Utc::now().into());
+
     match active_session.update(db.inner()).await {
         Ok(_) => Ok(Json(UpdateSessionOutput {
             success: true,
