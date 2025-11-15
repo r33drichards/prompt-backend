@@ -53,6 +53,7 @@ fn generate_openapi_spec() -> String {
         handlers::sessions::list,
         handlers::sessions::update,
         handlers::sessions::delete,
+        handlers::sessions::cancel,
         handlers::prompts::create,
         handlers::prompts::read,
         handlers::prompts::list,
@@ -149,6 +150,19 @@ async fn main() -> anyhow::Result<()> {
         });
 
         handles.push(ip_return_handle);
+
+        // Spawn cancellation enforcer
+        let cancellation_database_url = database_url.clone();
+        let cancellation_handle = tokio::spawn(async move {
+            info!("Starting cancellation enforcer");
+
+            // Create SeaORM database connection for the enforcer
+            let db = establish_connection(&cancellation_database_url).await?;
+
+            bg_tasks::cancellation_enforcer::run_cancellation_enforcer(db).await
+        });
+
+        handles.push(cancellation_handle);
     }
 
     // If no services specified, error out
@@ -233,6 +247,7 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
                 handlers::sessions::list,
                 handlers::sessions::update,
                 handlers::sessions::delete,
+                handlers::sessions::cancel,
                 handlers::prompts::create,
                 handlers::prompts::read,
                 handlers::prompts::list,

@@ -14,7 +14,7 @@ use sandbox_client::types::ShellExecRequest;
 use crate::entities::message;
 use crate::entities::message::Entity as Message;
 use crate::entities::prompt::Entity as Prompt;
-use crate::entities::session::{Entity as Session, UiStatus};
+use crate::entities::session::{CancellationStatus, Entity as Session, UiStatus};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +140,30 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             error!("Session {} not found", session_id);
             Error::Failed("Session not found".into())
         })?;
+
+    // Check if session has cancellation requested
+    if let Some(CancellationStatus::Requested) = _session_model.cancellation_status {
+        info!(
+            "Session {} has cancellation requested - marking as cancelled and skipping processing",
+            session_id
+        );
+
+        // Update session to mark as cancelled
+        let mut active_session: crate::entities::session::ActiveModel = _session_model.into();
+        active_session.cancellation_status = Set(Some(CancellationStatus::Cancelled));
+        active_session.ui_status = Set(UiStatus::NeedsReview);
+
+        active_session.update(&ctx.db).await.map_err(|e| {
+            error!(
+                "Failed to update session {} to cancelled status: {}",
+                session_id, e
+            );
+            Error::Failed(Box::new(e))
+        })?;
+
+        info!("Session {} marked as cancelled", session_id);
+        return Ok(());
+    }
 
     info!("Processing prompt {} for session {}", prompt_id, session_id);
 
@@ -416,6 +440,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let prompt_id_clone = prompt_id;
     let db_clone = ctx.db.clone();
     let session_id_clone = session_id;
+    let db_for_pid = ctx.db.clone();
 
     // Spawn the Claude CLI process with piped stdout/stderr for streaming
     let cli_result = tokio::task::spawn_blocking(move || {
@@ -466,6 +491,41 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
                 return Err(e);
             }
         };
+
+        // Store the process PID in the database
+        let pid = child.id();
+        info!("Claude CLI process spawned with PID {} for session {}", pid, session_id_clone);
+
+        // Update session with PID using tokio runtime handle
+        let handle = tokio::runtime::Handle::current();
+        let update_result = handle.block_on(async {
+            let session = Session::find_by_id(session_id_clone)
+                .one(&db_for_pid)
+                .await
+                .map_err(|e| {
+                    error!("Failed to query session {} for PID update: {}", session_id_clone, e);
+                    e
+                })?
+                .ok_or_else(|| {
+                    error!("Session {} not found for PID update", session_id_clone);
+                    sea_orm::DbErr::RecordNotFound(format!("Session {} not found", session_id_clone))
+                })?;
+
+            let mut active_session: crate::entities::session::ActiveModel = session.into();
+            active_session.process_pid = Set(Some(pid as i32));
+
+            active_session.update(&db_for_pid).await.map_err(|e| {
+                error!("Failed to update session {} with PID: {}", session_id_clone, e);
+                e
+            })
+        });
+
+        if let Err(e) = update_result {
+            error!("Failed to store PID for session {}: {}", session_id_clone, e);
+            // Continue anyway - the process is already running
+        } else {
+            info!("Successfully stored PID {} for session {}", pid, session_id_clone);
+        }
 
         // Take stdout and stderr handles
         let stdout = child.stdout.take().expect("Failed to capture stdout");
@@ -575,6 +635,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         Ok(Some(session_model)) => {
             let mut active_session: crate::entities::session::ActiveModel = session_model.into();
             active_session.ui_status = Set(UiStatus::NeedsReview);
+            active_session.process_pid = Set(None); // Clear PID now that process is complete
 
             if let Err(e) = active_session.update(&ctx.db).await {
                 error!(

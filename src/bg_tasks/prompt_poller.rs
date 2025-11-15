@@ -6,7 +6,7 @@ use tracing::{error, info};
 
 use super::outbox_publisher::OutboxJob;
 use crate::entities::prompt::{self, Entity as Prompt};
-use crate::entities::session::{self, Entity as Session, UiStatus};
+use crate::entities::session::{self, CancellationStatus, Entity as Session, UiStatus};
 
 /// Periodic poller that checks for pending prompts every second
 /// and pushes them to the outbox queue for processing
@@ -36,9 +36,14 @@ async fn poll_and_enqueue_prompts(
     db: &DatabaseConnection,
     storage: &mut PostgresStorage<OutboxJob>,
 ) -> anyhow::Result<usize> {
-    // Query all sessions with Pending UI status
+    // Query all sessions with Pending UI status and no cancellation requested
     let pending_sessions = Session::find()
         .filter(session::Column::UiStatus.eq(UiStatus::Pending))
+        .filter(
+            session::Column::CancellationStatus
+                .is_null()
+                .or(session::Column::CancellationStatus.ne(CancellationStatus::Requested)),
+        )
         .all(db)
         .await?;
 
