@@ -14,7 +14,7 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(Session::SessionStatus)
                             .string_len(50)
                             .not_null()
-                            .default("active")
+                            .default("active"),
                     )
                     .to_owned(),
             )

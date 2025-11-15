@@ -14,18 +14,18 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(Session::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null()
-                            .default(Expr::current_timestamp())
+                            .default(Expr::current_timestamp()),
                     )
                     .add_column(
                         ColumnDef::new(Session::UpdatedAt)
                             .timestamp_with_time_zone()
                             .not_null()
-                            .default(Expr::current_timestamp())
+                            .default(Expr::current_timestamp()),
                     )
                     .add_column(
                         ColumnDef::new(Session::DeletedAt)
                             .timestamp_with_time_zone()
-                            .null()
+                            .null(),
                     )
                     .to_owned(),
             )

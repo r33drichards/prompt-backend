@@ -20,11 +20,7 @@ impl MigrationTrait for Migration {
                             .timestamp_with_time_zone()
                             .null(),
                     )
-                    .add_column(
-                        ColumnDef::new(Session::CancelledBy)
-                            .string()
-                            .null(),
-                    )
+                    .add_column(ColumnDef::new(Session::CancelledBy).string().null())
                     .to_owned(),
             )
             .await

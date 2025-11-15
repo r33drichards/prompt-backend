@@ -1,8 +1,10 @@
 use chrono::Utc;
 use rust_redis_webserver::entities::session::{
-    CancellationStatus, Entity as Session, UiStatus, Model as SessionModel,
+    CancellationStatus, Entity as Session, Model as SessionModel, UiStatus,
 };
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, NotSet, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, NotSet, QueryFilter, Set,
+};
 use uuid::Uuid;
 
 /// Helper function to create a test database connection
@@ -281,19 +283,16 @@ async fn test_multiple_sessions_cancellation() {
         .expect("Failed to create session 3");
 
     // Mark session1 and session2 for cancellation (with PIDs)
-    let mut active_session1: rust_redis_webserver::entities::session::ActiveModel =
-        session1.into();
+    let mut active_session1: rust_redis_webserver::entities::session::ActiveModel = session1.into();
     active_session1.cancellation_status = Set(Some(CancellationStatus::Requested));
     let updated1 = active_session1.update(&db).await.expect("Failed to update");
 
-    let mut active_session2: rust_redis_webserver::entities::session::ActiveModel =
-        session2.into();
+    let mut active_session2: rust_redis_webserver::entities::session::ActiveModel = session2.into();
     active_session2.cancellation_status = Set(Some(CancellationStatus::Requested));
     let updated2 = active_session2.update(&db).await.expect("Failed to update");
 
     // Mark session3 for cancellation (without PID)
-    let mut active_session3: rust_redis_webserver::entities::session::ActiveModel =
-        session3.into();
+    let mut active_session3: rust_redis_webserver::entities::session::ActiveModel = session3.into();
     active_session3.cancellation_status = Set(Some(CancellationStatus::Requested));
     let updated3 = active_session3.update(&db).await.expect("Failed to update");
 

@@ -11,12 +11,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Message::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(Message::Id)
-                            .uuid()
-                            .not_null()
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(Message::Id).uuid().not_null().primary_key())
                     .col(ColumnDef::new(Message::PromptId).uuid().not_null())
                     .col(ColumnDef::new(Message::Data).json_binary().not_null())
                     .col(

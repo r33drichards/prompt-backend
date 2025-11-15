@@ -11,12 +11,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Session::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(Session::Id)
-                            .uuid()
-                            .not_null()
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(Session::Id).uuid().not_null().primary_key())
                     .col(ColumnDef::new(Session::Messages).json_binary().null())
                     .col(
                         ColumnDef::new(Session::InboxStatus)
