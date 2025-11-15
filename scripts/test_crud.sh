@@ -129,7 +129,7 @@ READ_RESPONSE2=$(curl -s http://localhost:8000/sessions/$SESSION_ID \
   -H "Authorization: Bearer $ACCESS_TOKEN")
 echo "Read response after update: $READ_RESPONSE2"
 
-if echo "$READ_RESPONSE2" | grep -qi '"ui_status":"[Aa]rchived"'; then
+if echo "$READ_RESPONSE2" | grep -qi '"uiStatus":"[Aa]rchived"'; then
   echo "✓ Test 5 passed: Update verified"
 else
   echo "✗ Test 5 failed: Update not reflected"
