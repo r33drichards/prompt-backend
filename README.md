@@ -43,14 +43,14 @@ The template automatically generates and publishes a TypeScript API client to np
 
 ```bash
 # Install the stable version
-npm install @wholelottahoopla/prompt-backend-client
+npm install @r33drichards/prompt-backend-client
 
 # Or install a beta version from a PR (for testing)
-npm install @wholelottahoopla/prompt-backend-client@0.1.0-beta.pr123.abc1234
+npm install @r33drichards/prompt-backend-client@0.1.0-beta.pr123.abc1234
 ```
 
 ```typescript
-import { Configuration, DefaultApi } from '@wholelottahoopla/prompt-backend-client';
+import { Configuration, DefaultApi } from '@r33drichards/prompt-backend-client';
 
 const config = new Configuration({
   basePath: 'http://localhost:8000'
@@ -103,7 +103,7 @@ openapi-generator-cli generate \
   -i openapi.json \
   -g typescript-fetch \
   -o generated-client \
-  --additional-properties=npmName=@wholelottahoopla/prompt-backend-client,npmVersion=$SDK_VERSION,supportsES6=true,typescriptThreePlus=true
+  --additional-properties=npmName=@r33drichards/prompt-backend-client,npmVersion=$SDK_VERSION,supportsES6=true,typescriptThreePlus=true
 
 # Install and build
 cd generated-client

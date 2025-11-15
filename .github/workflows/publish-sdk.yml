@@ -12,7 +12,7 @@ on:
         default: ''
 
 env:
-  PACKAGE_NAME: "@wholelottahoopla/prompt-backend-client"
+  PACKAGE_NAME: "@r33drichards/prompt-backend-client"
 
 jobs:
   generate-and-publish:
