@@ -12,10 +12,10 @@ The `package.json` file in this directory is the **source of truth** for SDK ver
 ### Versioning Strategy
 
 - **Main branch**: Uses the exact version from `sdk/package.json`
-  - Example: `0.1.0` → publishes as `@r33drichards/prompt-backend-client@0.1.0`
+  - Example: `0.1.0` → publishes as `@wholelottahoopla/prompt-backend-client@0.1.0`
 
 - **Pull requests**: Appends beta suffix with PR number and commit SHA
-  - Example: `0.1.0` → publishes as `@r33drichards/prompt-backend-client@0.1.0-beta.pr8.abc1234`
+  - Example: `0.1.0` → publishes as `@wholelottahoopla/prompt-backend-client@0.1.0-beta.pr8.abc1234`
 
 - **Manual workflow dispatch**: Can override with custom version
 

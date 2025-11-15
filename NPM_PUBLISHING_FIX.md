@@ -28,7 +28,7 @@ Change the package scope to match the GitHub repository owner's npm username.
 2. Update `sdk/package.json`:
    ```json
    {
-     "name": "@r33drichards/prompt-backend-client",
+     "name": "@wholelottahoopla/prompt-backend-client",
      "version": "0.1.9",
      ...
    }
@@ -75,7 +75,7 @@ Publish without a scope (not recommended for organizational packages):
 
 ## Recommended Action
 
-**Use Option 1** - Change to `@r33drichards/prompt-backend-client` because:
+**Use Option 1** - Change to `@wholelottahoopla/prompt-backend-client` because:
 - ✅ Aligns with the GitHub repository owner
 - ✅ No additional npm setup required (if account exists)
 - ✅ Clear ownership and namespace

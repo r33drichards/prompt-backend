@@ -85,8 +85,8 @@ cargo test
 nix run .#generateTypescriptClient
 
 # The SDK is automatically published to npm via GitHub Actions:
-# - Main branch: @r33drichards/prompt-backend-client@<version>
-# - PRs: @r33drichards/prompt-backend-client@<version>-beta.pr<number>.<sha>
+# - Main branch: @wholelottahoopla/prompt-backend-client@<version>
+# - PRs: @wholelottahoopla/prompt-backend-client@<version>-beta.pr<number>.<sha>
 ```
 
 ## Development Workflow

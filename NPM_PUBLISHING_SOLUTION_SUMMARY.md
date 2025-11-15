@@ -17,7 +17,7 @@ npm error 404  '@wholelottahoopla/prompt-backend-client@0.1.9' is not in this re
 
 ### Phase 2: Alternative Solution (Current Session)
 - **Approach:** Change package scope to align with GitHub owner
-- **New Package Name:** `@r33drichards/prompt-backend-client`
+- **New Package Name:** `@wholelottahoopla/prompt-backend-client`
 - **Benefits:** Clear ownership, independent namespace, no dependency on external accounts
 - **Documentation:** `NPM_PUBLISHING_FIX.md`
 
@@ -58,10 +58,10 @@ npm error 404  '@wholelottahoopla/prompt-backend-client@0.1.9' is not in this re
 1. Merge this PR (all changes already committed)
 2. Verify npm account exists: https://www.npmjs.com/~r33drichards
 3. Update `NPM_TOKEN` GitHub secret with token for `r33drichards` account
-4. Push to master - GitHub Actions will publish as `@r33drichards/prompt-backend-client@0.1.9`
+4. Push to master - GitHub Actions will publish as `@wholelottahoopla/prompt-backend-client@0.1.9`
 
 **Changes already made:**
-- ✅ `sdk/package.json` - Changed to `@r33drichards/prompt-backend-client`
+- ✅ `sdk/package.json` - Changed to `@wholelottahoopla/prompt-backend-client`
 - ✅ `.github/workflows/publish-sdk.yml` - Updated PACKAGE_NAME env var
 - ✅ `README.md` - Updated installation examples
 - ✅ `CLAUDE.md` - Updated version documentation  
@@ -73,7 +73,7 @@ npm error 404  '@wholelottahoopla/prompt-backend-client@0.1.9' is not in this re
 npm uninstall @wholelottahoopla/prompt-backend-client
 
 # New package
-npm install @r33drichards/prompt-backend-client
+npm install @wholelottahoopla/prompt-backend-client
 ```
 
 ---
