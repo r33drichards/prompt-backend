@@ -11,12 +11,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Prompt::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(Prompt::Id)
-                            .uuid()
-                            .not_null()
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(Prompt::Id).uuid().not_null().primary_key())
                     .col(ColumnDef::new(Prompt::SessionId).uuid().not_null())
                     .col(ColumnDef::new(Prompt::Data).json_binary().not_null())
                     .col(

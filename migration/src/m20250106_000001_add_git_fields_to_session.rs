@@ -10,21 +10,9 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(Session::Table)
-                    .add_column(
-                        ColumnDef::new(Session::Branch)
-                            .string()
-                            .null()
-                    )
-                    .add_column(
-                        ColumnDef::new(Session::Repo)
-                            .string()
-                            .null()
-                    )
-                    .add_column(
-                        ColumnDef::new(Session::TargetBranch)
-                            .string()
-                            .null()
-                    )
+                    .add_column(ColumnDef::new(Session::Branch).string().null())
+                    .add_column(ColumnDef::new(Session::Repo).string().null())
+                    .add_column(ColumnDef::new(Session::TargetBranch).string().null())
                     .to_owned(),
             )
             .await
