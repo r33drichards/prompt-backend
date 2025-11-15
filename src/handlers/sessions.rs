@@ -106,6 +106,7 @@ impl From<SessionModel> for SessionDto {
             branch: model.branch,
             repo: model.repo,
             target_branch: model.target_branch,
+            repositories: None, // Will be populated by handler if needed
             title: model.title,
             ui_status: model.ui_status,
             created_at: model.created_at.to_string(),
@@ -251,19 +252,48 @@ pub async fn create_with_prompt(
         .and_then(|v| v.as_str())
         .unwrap_or("New session");
 
+    // Determine which repositories to use
+    // Priority: repositories array > single repo/target_branch
+    let repos_to_create: Vec<RepositoryInput> = if let Some(repos) = &input.repositories {
+        // Use the new multi-repo array
+        repos.clone()
+    } else if let (Some(repo), Some(target_branch)) = (&input.repo, &input.target_branch) {
+        // Fall back to legacy single repo
+        vec![RepositoryInput {
+            repo: repo.clone(),
+            target_branch: target_branch.clone(),
+        }]
+    } else {
+        return Err(Error::bad_request(
+            "Either 'repositories' array or 'repo'+'target_branch' must be provided".to_string(),
+        ));
+    };
+
+    if repos_to_create.is_empty() {
+        return Err(Error::bad_request(
+            "At least one repository must be provided".to_string(),
+        ));
+    }
+
+    // Use first repo for title/branch generation and legacy fields
+    let first_repo = &repos_to_create[0];
+
     // Generate title using Anthropic Haiku
-    let title =
-        anthropic::generate_session_title(&input.repo, &input.target_branch, prompt_content)
-            .await
-            .unwrap_or_else(|e| {
-                tracing::warn!("Failed to generate session title: {}", e);
-                "Untitled Session".to_string()
-            });
+    let title = anthropic::generate_session_title(
+        &Some(first_repo.repo.clone()),
+        &Some(first_repo.target_branch.clone()),
+        prompt_content,
+    )
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!("Failed to generate session title: {}", e);
+        "Untitled Session".to_string()
+    });
 
     // Generate branch name
     let generated_branch = anthropic::generate_branch_name(
-        &input.repo,
-        &input.target_branch,
+        &Some(first_repo.repo.clone()),
+        &Some(first_repo.target_branch.clone()),
         prompt_content,
         &session_id.to_string(),
     )
@@ -273,13 +303,14 @@ pub async fn create_with_prompt(
         format!("claude/session-{}", &session_id.to_string()[..24])
     });
 
+    // Create session with legacy fields populated from first repo (backward compatibility)
     let new_session = session::ActiveModel {
         id: Set(session_id),
         sbx_config: Set(None),
         parent: Set(parent),
         branch: Set(Some(generated_branch)),
-        repo: Set(Some(input.repo.clone())),
-        target_branch: Set(Some(input.target_branch.clone())),
+        repo: Set(Some(first_repo.repo.clone())),
+        target_branch: Set(Some(first_repo.target_branch.clone())),
         title: Set(Some(title)),
         ui_status: Set(UiStatus::Pending),
         user_id: Set(user.user_id.clone()),
@@ -298,6 +329,24 @@ pub async fn create_with_prompt(
         .insert(db.inner())
         .await
         .map_err(|e| Error::database_error(e.to_string()))?;
+
+    // Create session_repository entries for all repos
+    for repo_input in repos_to_create {
+        let repo_id = Uuid::new_v4();
+        let new_repo = session_repository::ActiveModel {
+            id: Set(repo_id),
+            session_id: Set(session_id),
+            repo: Set(repo_input.repo),
+            target_branch: Set(repo_input.target_branch),
+            created_at: NotSet,
+            updated_at: NotSet,
+        };
+
+        new_repo
+            .insert(db.inner())
+            .await
+            .map_err(|e| Error::database_error(e.to_string()))?;
+    }
 
     // Create the initial prompt
     let prompt_id = Uuid::new_v4();
@@ -333,17 +382,40 @@ pub async fn read(
     let uuid =
         Uuid::parse_str(&id).map_err(|_| Error::bad_request("Invalid UUID format".to_string()))?;
 
-    match Session::find_by_id(uuid)
+    let session = Session::find_by_id(uuid)
         .filter(session::Column::UserId.eq(&user.user_id))
         .one(db.inner())
         .await
-    {
-        Ok(Some(session)) => Ok(Json(ReadSessionOutput {
-            session: session.into(),
-        })),
-        Ok(None) => Err(Error::not_found("Session not found".to_string())),
-        Err(e) => Err(Error::database_error(e.to_string())),
+        .map_err(|e| Error::database_error(e.to_string()))?
+        .ok_or_else(|| Error::not_found("Session not found".to_string()))?;
+
+    // Load related repositories
+    let repositories = session_repository::Entity::find()
+        .filter(session_repository::Column::SessionId.eq(uuid))
+        .all(db.inner())
+        .await
+        .map_err(|e| Error::database_error(e.to_string()))?;
+
+    // Convert to DTO
+    let mut session_dto: SessionDto = session.into();
+    
+    // Populate repositories array if any exist
+    if !repositories.is_empty() {
+        session_dto.repositories = Some(
+            repositories
+                .into_iter()
+                .map(|r| RepositoryDto {
+                    id: r.id.to_string(),
+                    repo: r.repo,
+                    target_branch: r.target_branch,
+                })
+                .collect(),
+        );
     }
+
+    Ok(Json(ReadSessionOutput {
+        session: session_dto,
+    }))
 }
 
 /// List all sessions
@@ -353,17 +425,61 @@ pub async fn list(
     user: AuthenticatedUser,
     db: &State<DatabaseConnection>,
 ) -> OResult<ListSessionsOutput> {
-    match Session::find()
+    let sessions = Session::find()
         .filter(session::Column::UserId.eq(&user.user_id))
         .order_by_asc(session::Column::Id)
         .all(db.inner())
         .await
-    {
-        Ok(sessions) => Ok(Json(ListSessionsOutput {
-            sessions: sessions.into_iter().map(|s| s.into()).collect(),
-        })),
-        Err(e) => Err(Error::database_error(e.to_string())),
+        .map_err(|e| Error::database_error(e.to_string()))?;
+
+    // Collect all session IDs
+    let session_ids: Vec<Uuid> = sessions.iter().map(|s| s.id).collect();
+
+    // Batch query all repositories for these sessions
+    let all_repositories = if !session_ids.is_empty() {
+        session_repository::Entity::find()
+            .filter(session_repository::Column::SessionId.is_in(session_ids))
+            .all(db.inner())
+            .await
+            .map_err(|e| Error::database_error(e.to_string()))?
+    } else {
+        vec![]
+    };
+
+    // Group repositories by session_id
+    let mut repos_by_session: std::collections::HashMap<Uuid, Vec<RepositoryDto>> =
+        std::collections::HashMap::new();
+    
+    for repo in all_repositories {
+        repos_by_session
+            .entry(repo.session_id)
+            .or_insert_with(Vec::new)
+            .push(RepositoryDto {
+                id: repo.id.to_string(),
+                repo: repo.repo,
+                target_branch: repo.target_branch,
+            });
     }
+
+    // Convert sessions to DTOs and populate repositories
+    let session_dtos: Vec<SessionDto> = sessions
+        .into_iter()
+        .map(|s| {
+            let session_id = s.id;
+            let mut dto: SessionDto = s.into();
+            
+            // Populate repositories if they exist for this session
+            if let Some(repos) = repos_by_session.get(&session_id) {
+                dto.repositories = Some(repos.clone());
+            }
+            
+            dto
+        })
+        .collect();
+
+    Ok(Json(ListSessionsOutput {
+        sessions: session_dtos,
+    }))
 }
 
 /// Update an existing session (PUT - partial update, only provided fields are updated)

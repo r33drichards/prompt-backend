@@ -15,6 +15,7 @@ use crate::entities::message;
 use crate::entities::message::Entity as Message;
 use crate::entities::prompt::Entity as Prompt;
 use crate::entities::session::{CancellationStatus, Entity as Session, UiStatus};
+use crate::entities::session_repository::Entity as SessionRepository;
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -284,32 +285,60 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         error!("Failed to authenticate with GitHub: {}", e);
         Error::Failed(Box::new(e))
     })?;
-    // clone the repo using session_id as directory name
+
+    // Query session_repositories for multi-repo support
+    let session_repositories = SessionRepository::find()
+        .filter(crate::entities::session_repository::Column::SessionId.eq(session_id))
+        .all(&ctx.db)
+        .await
+        .map_err(|e| {
+            error!("Failed to query session_repositories for session {}: {}", session_id, e);
+            Error::Failed(Box::new(e))
+        })?;
+
+    // Determine which repositories to clone
+    // If session_repositories exist, use them; otherwise fall back to legacy session fields
+    let repos_to_clone: Vec<(String, String)> = if !session_repositories.is_empty() {
+        info!("Found {} repositories for session {}", session_repositories.len(), session_id);
+        session_repositories
+            .into_iter()
+            .map(|sr| (sr.repo, sr.target_branch))
+            .collect()
+    } else if let (Some(repo), Some(target_branch)) = (_session_model.repo.clone(), _session_model.target_branch.clone()) {
+        info!("Using legacy single repo for session {}", session_id);
+        vec![(repo, target_branch)]
+    } else {
+        error!("No repositories configured for session {}", session_id);
+        return Err(Error::Failed("No repositories configured for session".into()));
+    };
+
+    // Clone all repositories
+    // Use first repo as primary (for backward compatibility with existing code)
+    let (primary_repo, primary_target_branch) = &repos_to_clone[0];
     let repo_dir = format!("repo_{}", session_id);
+    
+    info!("Cloning primary repository {} for session {}", primary_repo, session_id);
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
         command: format!(
             "git clone https://github.com/{}.git {}",
-            _session_model.repo.clone().unwrap(),
+            primary_repo,
             repo_dir
         ),
         async_mode: false,
         id: None,
-        timeout: Some(30.0_f64),
+        timeout: Some(60.0_f64),
         exec_dir: Some(String::from("/home/gem")),
     })
     .await
     .map_err(|e| {
-        error!("Failed to execute command: {}", e);
+        error!("Failed to clone primary repository: {}", e);
         Error::Failed(Box::new(e))
     })?;
 
-    // checkout the target branch
+    // checkout the target branch for primary repo
     let repo_path = format!("/home/gem/{}", repo_dir);
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: format!(
-            "git checkout {}",
-            _session_model.target_branch.clone().unwrap()
-        ),
+        command: format!("git checkout {}", primary_target_branch),
         async_mode: false,
         id: None,
         timeout: Some(30.0_f64),
@@ -317,7 +346,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     })
     .await
     .map_err(|e| {
-        error!("Failed to execute command: {}", e);
+        error!("Failed to checkout target branch for primary repo: {}", e);
         Error::Failed(Box::new(e))
     })?;
 
@@ -325,7 +354,8 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         .branch
         .clone()
         .unwrap_or_else(|| format!("claude/{}", _session_model.id));
-    // if branch exists, checkout the branch, else switch -c the branch
+    
+    // if branch exists, checkout the branch, else switch -c the branch (primary repo)
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
         command: format!("git checkout {} || git switch -c {}", branch, branch),
         async_mode: false,
@@ -335,9 +365,67 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     })
     .await
     .map_err(|e| {
-        error!("Failed to execute command: {}", e);
+        error!("Failed to checkout/create work branch for primary repo: {}", e);
         Error::Failed(Box::new(e))
     })?;
+
+    // Clone additional repositories if any
+    if repos_to_clone.len() > 1 {
+        info!("Cloning {} additional repositories for session {}", repos_to_clone.len() - 1, session_id);
+        
+        for (idx, (repo, target_branch)) in repos_to_clone.iter().skip(1).enumerate() {
+            let additional_repo_dir = format!("repo_{}_additional_{}", session_id, idx);
+            
+            info!("Cloning additional repository {}: {}", idx, repo);
+            sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+                command: format!(
+                    "git clone https://github.com/{}.git {}",
+                    repo,
+                    additional_repo_dir
+                ),
+                async_mode: false,
+                id: None,
+                timeout: Some(60.0_f64),
+                exec_dir: Some(String::from("/home/gem")),
+            })
+            .await
+            .map_err(|e| {
+                error!("Failed to clone additional repository {}: {}", repo, e);
+                Error::Failed(Box::new(e))
+            })?;
+
+            // Checkout target branch for additional repo
+            let additional_repo_path = format!("/home/gem/{}", additional_repo_dir);
+            sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+                command: format!("git checkout {}", target_branch),
+                async_mode: false,
+                id: None,
+                timeout: Some(30.0_f64),
+                exec_dir: Some(additional_repo_path.clone()),
+            })
+            .await
+            .map_err(|e| {
+                error!("Failed to checkout target branch for additional repo {}: {}", repo, e);
+                Error::Failed(Box::new(e))
+            })?;
+
+            // Create/checkout work branch for additional repo
+            sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
+                command: format!("git checkout {} || git switch -c {}", branch, branch),
+                async_mode: false,
+                id: None,
+                timeout: Some(30.0_f64),
+                exec_dir: Some(additional_repo_path),
+            })
+            .await
+            .map_err(|e| {
+                error!("Failed to checkout/create work branch for additional repo {}: {}", repo, e);
+                Error::Failed(Box::new(e))
+            })?;
+
+            info!("Successfully cloned and configured additional repository {}: {}", idx, repo);
+        }
+    }
 
     // Run Claude Code CLI directly in the job (not fire-and-forget)
     let session_id = _session_model.id;
