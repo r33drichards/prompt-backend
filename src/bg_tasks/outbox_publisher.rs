@@ -43,10 +43,13 @@ fn get_primary_repo_url(session: &crate::entities::session::Model) -> String {
             }
         }
     }
-    
+
     // Fall back to deprecated repo field
     #[allow(deprecated)]
-    session.repo.clone().unwrap_or_else(|| "unknown/repo".to_string())
+    session
+        .repo
+        .clone()
+        .unwrap_or_else(|| "unknown/repo".to_string())
 }
 
 /// Fetch all previous prompts in the session and format them using toon-format
@@ -304,11 +307,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     let repo_dir = format!("repo_{}", session_id);
     let repo_url = get_primary_repo_url(&_session_model);
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: format!(
-            "git clone https://github.com/{}.git {}",
-            repo_url,
-            repo_dir
-        ),
+        command: format!("git clone https://github.com/{}.git {}", repo_url, repo_dir),
         async_mode: false,
         id: None,
         timeout: Some(30.0_f64),
