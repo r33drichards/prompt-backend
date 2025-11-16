@@ -10,3 +10,4 @@ pub mod entities;
 pub mod error;
 pub mod handlers;
 pub mod services;
+pub mod storage;
