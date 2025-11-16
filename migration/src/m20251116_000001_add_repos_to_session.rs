@@ -16,15 +16,16 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // Step 2: Migrate data from repo and target_branch to repos
-        // This SQL will create a JSONB object with the repos array containing the old repo and branch
+        // Step 2: Migrate data from repo, branch, and target_branch to repos
+        // This SQL will create a JSONB object with the repos array containing the old repo, branch, and target_branch
         let sql = r#"
             UPDATE session
             SET repos = jsonb_build_object(
                 'repos', jsonb_build_array(
                     jsonb_build_object(
-                        'url', repo,
-                        'branch', COALESCE(target_branch, 'main')
+                        'repo', repo,
+                        'branch', branch,
+                        'target_branch', target_branch
                     )
                 )
             )
@@ -53,5 +54,6 @@ enum Session {
     Table,
     Repos,
     Repo,
+    Branch,
     TargetBranch,
 }

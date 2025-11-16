@@ -402,6 +402,7 @@ pub async fn update(
     if parent.is_some() || input.parent.is_some() {
         active_session.parent = Set(parent);
     }
+    #[allow(deprecated)]
     if input.branch.is_some() {
         active_session.branch = Set(input.branch.clone());
     }
@@ -409,6 +410,7 @@ pub async fn update(
     if input.repo.is_some() {
         active_session.repo = Set(input.repo.clone());
     }
+    #[allow(deprecated)]
     if input.target_branch.is_some() {
         active_session.target_branch = Set(input.target_branch.clone());
     }
