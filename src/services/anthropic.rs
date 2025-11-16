@@ -10,7 +10,9 @@ pub async fn generate_session_title(
     prompt: &str,
 ) -> Result<String, String> {
     let provider = ProviderFactory::create_from_env()?;
-    provider.generate_title(git_repo, target_branch, prompt).await
+    provider
+        .generate_title(git_repo, target_branch, prompt)
+        .await
 }
 
 /// Generate a git branch name using the configured title provider
