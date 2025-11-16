@@ -147,10 +147,10 @@ pub async fn create(
         None => None,
     };
 
-    let prompt = "todo";
+    let prompt = "todo".to_string();
 
     // Generate title using Anthropic Haiku
-    let title = anthropic::generate_session_title(&input.repo, &input.target_branch, prompt)
+    let title = anthropic::generate_session_title(&input.repo, &input.target_branch, &prompt)
         .await
         .unwrap_or_else(|e| {
             tracing::warn!("Failed to generate session title: {}", e);
@@ -158,13 +158,17 @@ pub async fn create(
         });
 
     // Generate branch name
-    let generated_branch =
-        anthropic::generate_branch_name(&input.repo, &input.target_branch, prompt, &id.to_string())
-            .await
-            .unwrap_or_else(|e| {
-                tracing::warn!("Failed to generate branch name: {}", e);
-                format!("claude/session-{}", &id.to_string()[..24])
-            });
+    let generated_branch = anthropic::generate_branch_name(
+        &input.repo,
+        &input.target_branch,
+        &prompt,
+        &id.to_string(),
+    )
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!("Failed to generate branch name: {}", e);
+        format!("claude/session-{}", &id.to_string()[..24])
+    });
 
     let new_session = session::ActiveModel {
         id: Set(id),
@@ -216,15 +220,16 @@ pub async fn create_with_prompt(
 
     // Extract prompt content for title/branch generation
     // Try to get "content" field from messages, or use the entire JSON as string
-    let prompt_content = input
-        .messages
-        .get("content")
-        .and_then(|v| v.as_str())
-        .unwrap_or("New session");
+    let prompt_content = input.messages.to_string();
+
+    tracing::info!(
+        session_id = session_id.to_string(),
+        "prompt_content" = prompt_content,
+    );
 
     // Generate title using Anthropic Haiku
     let title =
-        anthropic::generate_session_title(&input.repo, &input.target_branch, prompt_content)
+        anthropic::generate_session_title(&input.repo, &input.target_branch, &prompt_content)
             .await
             .unwrap_or_else(|e| {
                 tracing::warn!("Failed to generate session title: {}", e);
@@ -235,7 +240,7 @@ pub async fn create_with_prompt(
     let generated_branch = anthropic::generate_branch_name(
         &input.repo,
         &input.target_branch,
-        prompt_content,
+        &prompt_content,
         &session_id.to_string(),
     )
     .await
