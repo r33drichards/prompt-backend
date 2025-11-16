@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 /// Repository configuration for a session
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RepoConfig {
-    pub url: String,
+    pub repo: String,
     pub branch: String,
+    pub target_branch: String,
 }
 
 /// Repositories configuration
@@ -24,13 +25,17 @@ pub struct Model {
     pub sbx_config: Option<Json>,
     #[sea_orm(nullable)]
     pub parent: Option<Uuid>,
+    /// @deprecated Use `repos` field instead. This field is kept for backward compatibility.
     #[sea_orm(nullable)]
+    #[deprecated(note = "Use repos field instead")]
     pub branch: Option<String>,
     /// @deprecated Use `repos` field instead. This field is kept for backward compatibility.
     #[sea_orm(nullable)]
     #[deprecated(note = "Use repos field instead")]
     pub repo: Option<String>,
+    /// @deprecated Use `repos` field instead. This field is kept for backward compatibility.
     #[sea_orm(nullable)]
+    #[deprecated(note = "Use repos field instead")]
     pub target_branch: Option<String>,
     #[sea_orm(nullable)]
     pub title: Option<String>,
