@@ -45,7 +45,7 @@ pub async fn generate_session_title(
     );
 
     let request_body = AnthropicRequest {
-        model: "claude-3-haiku-20240307".to_string(),
+        model: "claude-haiku-4-5".to_string(),
         max_tokens: 100,
         messages: vec![Message {
             role: "user".to_string(),
@@ -98,8 +98,6 @@ pub async fn generate_branch_name(
 
     // Build context from available information
     let mut context_parts = Vec::new();
-    context_parts.push(format!("Git repository: {}", git_repo));
-    context_parts.push(format!("target branch: {}", target_branch));
     context_parts.push(format!("Prompt: {}", prompt));
     let context = context_parts.join("\n");
 
@@ -109,7 +107,7 @@ pub async fn generate_branch_name(
     );
 
     let request_body = AnthropicRequest {
-        model: "claude-3-haiku-20240307".to_string(),
+        model: "claude-haiku-4-5".to_string(),
         max_tokens: 50,
         messages: vec![Message {
             role: "user".to_string(),
