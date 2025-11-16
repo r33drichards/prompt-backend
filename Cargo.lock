@@ -3384,6 +3384,7 @@ dependencies = [
  "apalis",
  "apalis-redis",
  "apalis-sql",
+ "async-trait",
  "base64ct",
  "chrono",
  "clap",

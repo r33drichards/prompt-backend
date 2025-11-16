@@ -150,16 +150,12 @@ pub async fn create(
     let prompt = "todo".to_string();
 
     // Generate title using configured provider from environment
-    let title = anthropic::generate_session_title(
-        &input.repo,
-        &input.target_branch,
-        &prompt,
-    )
-    .await
-    .unwrap_or_else(|e| {
-        tracing::warn!("Failed to generate session title: {}", e);
-        "Untitled Session".to_string()
-    });
+    let title = anthropic::generate_session_title(&input.repo, &input.target_branch, &prompt)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("Failed to generate session title: {}", e);
+            "Untitled Session".to_string()
+        });
 
     // Generate branch name using configured provider from environment
     let generated_branch = anthropic::generate_branch_name(
@@ -232,16 +228,13 @@ pub async fn create_with_prompt(
     );
 
     // Generate title using configured provider from environment
-    let title = anthropic::generate_session_title(
-        &input.repo,
-        &input.target_branch,
-        &prompt_content,
-    )
-    .await
-    .unwrap_or_else(|e| {
-        tracing::warn!("Failed to generate session title: {}", e);
-        "Untitled Session".to_string()
-    });
+    let title =
+        anthropic::generate_session_title(&input.repo, &input.target_branch, &prompt_content)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("Failed to generate session title: {}", e);
+                "Untitled Session".to_string()
+            });
 
     // Generate branch name using configured provider from environment
     let generated_branch = anthropic::generate_branch_name(

@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::{ProviderFactory, ProviderType};
+    use std::str::FromStr;
 
     #[test]
     fn test_provider_type_parsing() {
