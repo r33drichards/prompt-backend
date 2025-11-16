@@ -93,8 +93,11 @@
         dockerContents = [
           linuxRustPackage
           linuxPkgs.cacert
+          # needed for claude-code
           linuxPkgs.claude-code
           linuxPkgs.bashInteractive
+          # uncomment this for debugging purposes
+          linuxPkgs.uutils-coreutils-noprefix
         ];
 
         # Script to generate TypeScript API client
