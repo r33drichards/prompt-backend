@@ -12,7 +12,8 @@ use uuid::Uuid;
 use crate::auth::AuthenticatedUser;
 use crate::entities::prompt;
 use crate::entities::session::{
-    self, CancellationStatus, Entity as Session, Model as SessionModel, UiStatus,
+    self, CancellationStatus, Entity as Session, Model as SessionModel, RepoConfig, ReposConfig,
+    UiStatus,
 };
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
@@ -171,6 +172,15 @@ pub async fn create(
                 format!("claude/session-{}", &id.to_string()[..24])
             });
 
+    // Create the new repos structure
+    let repos_config = ReposConfig {
+        repos: vec![RepoConfig {
+            url: input.repo.clone(),
+            branch: input.target_branch.clone(),
+        }],
+    };
+    let repos_json = serde_json::to_value(repos_config).ok();
+
     #[allow(deprecated)]
     let new_session = session::ActiveModel {
         id: Set(id),
@@ -190,7 +200,7 @@ pub async fn create(
         cancelled_at: Set(None),
         cancelled_by: Set(None),
         process_pid: Set(None),
-        repos: Set(None),
+        repos: Set(repos_json),
     };
 
     match new_session.insert(db.inner()).await {
@@ -251,6 +261,15 @@ pub async fn create_with_prompt(
         format!("claude/session-{}", &session_id.to_string()[..24])
     });
 
+    // Create the new repos structure
+    let repos_config = ReposConfig {
+        repos: vec![RepoConfig {
+            url: input.repo.clone(),
+            branch: input.target_branch.clone(),
+        }],
+    };
+    let repos_json = serde_json::to_value(repos_config).ok();
+
     #[allow(deprecated)]
     let new_session = session::ActiveModel {
         id: Set(session_id),
@@ -270,7 +289,7 @@ pub async fn create_with_prompt(
         cancelled_at: Set(None),
         cancelled_by: Set(None),
         process_pid: Set(None),
-        repos: Set(None),
+        repos: Set(repos_json),
     };
 
     // Insert the session
