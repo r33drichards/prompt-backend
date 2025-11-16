@@ -2,6 +2,20 @@ use rocket_okapi::okapi::schemars::{self, JsonSchema};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
+/// Repository configuration for a session
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RepoConfig {
+    pub repo: String,
+    pub branch: String,
+    pub target_branch: String,
+}
+
+/// Repositories configuration
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ReposConfig {
+    pub repos: Vec<RepoConfig>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "session")]
 pub struct Model {
@@ -11,11 +25,17 @@ pub struct Model {
     pub sbx_config: Option<Json>,
     #[sea_orm(nullable)]
     pub parent: Option<Uuid>,
+    /// @deprecated Use `repos` field instead. This field is kept for backward compatibility.
     #[sea_orm(nullable)]
+    #[deprecated(note = "Use repos field instead")]
     pub branch: Option<String>,
+    /// @deprecated Use `repos` field instead. This field is kept for backward compatibility.
     #[sea_orm(nullable)]
+    #[deprecated(note = "Use repos field instead")]
     pub repo: Option<String>,
+    /// @deprecated Use `repos` field instead. This field is kept for backward compatibility.
     #[sea_orm(nullable)]
+    #[deprecated(note = "Use repos field instead")]
     pub target_branch: Option<String>,
     #[sea_orm(nullable)]
     pub title: Option<String>,
@@ -36,6 +56,8 @@ pub struct Model {
     pub cancelled_by: Option<String>,
     #[sea_orm(nullable)]
     pub process_pid: Option<i32>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub repos: Option<Json>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

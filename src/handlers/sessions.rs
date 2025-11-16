@@ -12,7 +12,8 @@ use uuid::Uuid;
 use crate::auth::AuthenticatedUser;
 use crate::entities::prompt;
 use crate::entities::session::{
-    self, CancellationStatus, Entity as Session, Model as SessionModel, UiStatus,
+    self, CancellationStatus, Entity as Session, Model as SessionModel, RepoConfig, ReposConfig,
+    UiStatus,
 };
 use crate::error::{Error, OResult};
 use crate::services::anthropic;
@@ -56,6 +57,8 @@ pub struct SessionDto {
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
     pub branch: Option<String>,
+    /// @deprecated Use repos field instead
+    #[deprecated(note = "Use repos field instead")]
     pub repo: Option<String>,
     pub target_branch: Option<String>,
     pub title: Option<String>,
@@ -66,10 +69,12 @@ pub struct SessionDto {
     pub cancellation_status: Option<CancellationStatus>,
     pub cancelled_at: Option<String>,
     pub cancelled_by: Option<String>,
+    pub repos: Option<serde_json::Value>,
 }
 
 impl From<SessionModel> for SessionDto {
     fn from(model: SessionModel) -> Self {
+        #[allow(deprecated)]
         SessionDto {
             id: model.id.to_string(),
             sbx_config: model.sbx_config,
@@ -85,6 +90,7 @@ impl From<SessionModel> for SessionDto {
             cancellation_status: model.cancellation_status,
             cancelled_at: model.cancelled_at.map(|d| d.to_string()),
             cancelled_by: model.cancelled_by,
+            repos: model.repos,
         }
     }
 }
@@ -170,6 +176,17 @@ pub async fn create(
         format!("claude/session-{}", &id.to_string()[..24])
     });
 
+    // Create the new repos structure
+    let repos_config = ReposConfig {
+        repos: vec![RepoConfig {
+            repo: input.repo.clone(),
+            branch: generated_branch.clone(),
+            target_branch: input.target_branch.clone(),
+        }],
+    };
+    let repos_json = serde_json::to_value(repos_config).ok();
+
+    #[allow(deprecated)]
     let new_session = session::ActiveModel {
         id: Set(id),
         sbx_config: Set(None),
@@ -188,6 +205,7 @@ pub async fn create(
         cancelled_at: Set(None),
         cancelled_by: Set(None),
         process_pid: Set(None),
+        repos: Set(repos_json),
     };
 
     match new_session.insert(db.inner()).await {
@@ -249,6 +267,17 @@ pub async fn create_with_prompt(
         format!("claude/session-{}", &session_id.to_string()[..24])
     });
 
+    // Create the new repos structure
+    let repos_config = ReposConfig {
+        repos: vec![RepoConfig {
+            repo: input.repo.clone(),
+            branch: generated_branch.clone(),
+            target_branch: input.target_branch.clone(),
+        }],
+    };
+    let repos_json = serde_json::to_value(repos_config).ok();
+
+    #[allow(deprecated)]
     let new_session = session::ActiveModel {
         id: Set(session_id),
         sbx_config: Set(None),
@@ -267,6 +296,7 @@ pub async fn create_with_prompt(
         cancelled_at: Set(None),
         cancelled_by: Set(None),
         process_pid: Set(None),
+        repos: Set(repos_json),
     };
 
     // Insert the session
@@ -379,12 +409,15 @@ pub async fn update(
     if parent.is_some() || input.parent.is_some() {
         active_session.parent = Set(parent);
     }
+    #[allow(deprecated)]
     if input.branch.is_some() {
         active_session.branch = Set(input.branch.clone());
     }
+    #[allow(deprecated)]
     if input.repo.is_some() {
         active_session.repo = Set(input.repo.clone());
     }
+    #[allow(deprecated)]
     if input.target_branch.is_some() {
         active_session.target_branch = Set(input.target_branch.clone());
     }

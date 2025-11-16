@@ -14,7 +14,7 @@ use sandbox_client::types::ShellExecRequest;
 use crate::entities::message;
 use crate::entities::message::Entity as Message;
 use crate::entities::prompt::Entity as Prompt;
-use crate::entities::session::{CancellationStatus, Entity as Session, UiStatus};
+use crate::entities::session::{CancellationStatus, Entity as Session, ReposConfig, UiStatus};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +31,63 @@ impl Job for OutboxJob {
 #[derive(Clone)]
 pub struct OutboxContext {
     pub db: DatabaseConnection,
+}
+
+/// Extract the first repository URL from the session's repos field, falling back to the deprecated repo field
+fn get_primary_repo_url(session: &crate::entities::session::Model) -> String {
+    // Try to get from the new repos field first
+    if let Some(repos_json) = &session.repos {
+        if let Ok(repos_config) = serde_json::from_value::<ReposConfig>(repos_json.clone()) {
+            if let Some(first_repo) = repos_config.repos.first() {
+                return first_repo.repo.clone();
+            }
+        }
+    }
+
+    // Fall back to deprecated repo field
+    #[allow(deprecated)]
+    session
+        .repo
+        .clone()
+        .unwrap_or_else(|| "unknown/repo".to_string())
+}
+
+/// Extract the branch from the session's repos field, falling back to the deprecated branch field
+fn get_primary_branch(session: &crate::entities::session::Model) -> String {
+    // Try to get from the new repos field first
+    if let Some(repos_json) = &session.repos {
+        if let Ok(repos_config) = serde_json::from_value::<ReposConfig>(repos_json.clone()) {
+            if let Some(first_repo) = repos_config.repos.first() {
+                return first_repo.branch.clone();
+            }
+        }
+    }
+
+    // Fall back to deprecated branch field, or generate default
+    #[allow(deprecated)]
+    session
+        .branch
+        .clone()
+        .unwrap_or_else(|| format!("claude/{}", session.id))
+}
+
+/// Extract the target branch from the session's repos field, falling back to the deprecated target_branch field
+fn get_primary_target_branch(session: &crate::entities::session::Model) -> String {
+    // Try to get from the new repos field first
+    if let Some(repos_json) = &session.repos {
+        if let Ok(repos_config) = serde_json::from_value::<ReposConfig>(repos_json.clone()) {
+            if let Some(first_repo) = repos_config.repos.first() {
+                return first_repo.target_branch.clone();
+            }
+        }
+    }
+
+    // Fall back to deprecated target_branch field, or default to "main"
+    #[allow(deprecated)]
+    session
+        .target_branch
+        .clone()
+        .unwrap_or_else(|| "main".to_string())
 }
 
 /// Fetch all previous prompts in the session and format them using toon-format
@@ -286,12 +343,9 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     })?;
     // clone the repo using session_id as directory name
     let repo_dir = format!("repo_{}", session_id);
+    let repo_url = get_primary_repo_url(&_session_model);
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: format!(
-            "git clone https://github.com/{}.git {}",
-            _session_model.repo.clone().unwrap(),
-            repo_dir
-        ),
+        command: format!("git clone https://github.com/{}.git {}", repo_url, repo_dir),
         async_mode: false,
         id: None,
         timeout: Some(30.0_f64),
@@ -305,11 +359,9 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
 
     // checkout the target branch
     let repo_path = format!("/home/gem/{}", repo_dir);
+    let target_branch = get_primary_target_branch(&_session_model);
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
-        command: format!(
-            "git checkout {}",
-            _session_model.target_branch.clone().unwrap()
-        ),
+        command: format!("git checkout {}", target_branch),
         async_mode: false,
         id: None,
         timeout: Some(30.0_f64),
@@ -321,10 +373,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         Error::Failed(Box::new(e))
     })?;
 
-    let branch = _session_model
-        .branch
-        .clone()
-        .unwrap_or_else(|| format!("claude/{}", _session_model.id));
+    let branch = get_primary_branch(&_session_model);
     // if branch exists, checkout the branch, else switch -c the branch
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
         command: format!("git checkout {} || git switch -c {}", branch, branch),
@@ -396,21 +445,9 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     // Construct system prompt with context about the task by replacing placeholders
     let system_prompt = SYSTEM_PROMPT_TEMPLATE
         .replace("{REPO_PATH}", &repo_path)
-        .replace(
-            "{REPO}",
-            &_session_model
-                .repo
-                .clone()
-                .unwrap_or_else(|| "unknown/repo".to_string()),
-        )
+        .replace("{REPO}", &repo_url)
         .replace("{BRANCH}", &branch)
-        .replace(
-            "{TARGET_BRANCH}",
-            &_session_model
-                .target_branch
-                .clone()
-                .unwrap_or_else(|| "main".to_string()),
-        );
+        .replace("{TARGET_BRANCH}", &target_branch);
 
     // Create clones for spawn_blocking
     let prompt_id_clone = prompt_id;

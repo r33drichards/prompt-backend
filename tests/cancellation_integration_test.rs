@@ -37,6 +37,7 @@ async fn create_test_session(
     process_pid: Option<i32>,
 ) -> Result<SessionModel, sea_orm::DbErr> {
     let session_id = Uuid::new_v4();
+    #[allow(deprecated)]
     let new_session = rust_redis_webserver::entities::session::ActiveModel {
         id: Set(session_id),
         sbx_config: Set(None),
@@ -48,6 +49,7 @@ async fn create_test_session(
         ui_status: Set(UiStatus::InProgress),
         user_id: Set(user_id.to_string()),
         ip_return_retry_count: Set(0),
+        repos: Set(None),
         created_at: NotSet,
         updated_at: NotSet,
         deleted_at: Set(None),
@@ -379,6 +381,7 @@ async fn test_cancellation_preserves_metadata() {
     let branch = "feature/test-branch";
     let title = "Important Test Session";
 
+    #[allow(deprecated)]
     let new_session = rust_redis_webserver::entities::session::ActiveModel {
         id: Set(session_id),
         sbx_config: Set(Some(serde_json::json!({"test": "config"}))),
@@ -390,6 +393,7 @@ async fn test_cancellation_preserves_metadata() {
         ui_status: Set(UiStatus::InProgress),
         user_id: Set(user_id.to_string()),
         ip_return_retry_count: Set(0),
+        repos: Set(None),
         created_at: NotSet,
         updated_at: NotSet,
         deleted_at: Set(None),

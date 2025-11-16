@@ -1183,6 +1183,8 @@ expression: spec
             "nullable": true
           },
           "repo": {
+            "description": "@deprecated Use repos field instead",
+            "deprecated": true,
             "type": "string",
             "nullable": true
           },
@@ -1221,6 +1223,9 @@ expression: spec
           },
           "cancelledBy": {
             "type": "string",
+            "nullable": true
+          },
+          "repos": {
             "nullable": true
           }
         }
