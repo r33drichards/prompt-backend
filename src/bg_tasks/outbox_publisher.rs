@@ -14,7 +14,7 @@ use sandbox_client::types::ShellExecRequest;
 use crate::entities::message;
 use crate::entities::message::Entity as Message;
 use crate::entities::prompt::Entity as Prompt;
-use crate::entities::session::{CancellationStatus, Entity as Session, UiStatus};
+use crate::entities::session::{CancellationStatus, Entity as Session, ReposConfig, UiStatus};
 
 /// Job that reads from PostgreSQL outbox and publishes to Redis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +31,22 @@ impl Job for OutboxJob {
 #[derive(Clone)]
 pub struct OutboxContext {
     pub db: DatabaseConnection,
+}
+
+/// Extract the first repository URL from the session's repos field, falling back to the deprecated repo field
+fn get_primary_repo_url(session: &crate::entities::session::Model) -> String {
+    // Try to get from the new repos field first
+    if let Some(repos_json) = &session.repos {
+        if let Ok(repos_config) = serde_json::from_value::<ReposConfig>(repos_json.clone()) {
+            if let Some(first_repo) = repos_config.repos.first() {
+                return first_repo.url.clone();
+            }
+        }
+    }
+    
+    // Fall back to deprecated repo field
+    #[allow(deprecated)]
+    session.repo.clone().unwrap_or_else(|| "unknown/repo".to_string())
 }
 
 /// Fetch all previous prompts in the session and format them using toon-format
@@ -286,10 +302,11 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     })?;
     // clone the repo using session_id as directory name
     let repo_dir = format!("repo_{}", session_id);
+    let repo_url = get_primary_repo_url(&_session_model);
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
         command: format!(
             "git clone https://github.com/{}.git {}",
-            _session_model.repo.clone().unwrap(),
+            repo_url,
             repo_dir
         ),
         async_mode: false,
@@ -396,13 +413,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     // Construct system prompt with context about the task by replacing placeholders
     let system_prompt = SYSTEM_PROMPT_TEMPLATE
         .replace("{REPO_PATH}", &repo_path)
-        .replace(
-            "{REPO}",
-            &_session_model
-                .repo
-                .clone()
-                .unwrap_or_else(|| "unknown/repo".to_string()),
-        )
+        .replace("{REPO}", &repo_url)
         .replace("{BRANCH}", &branch)
         .replace(
             "{TARGET_BRANCH}",
