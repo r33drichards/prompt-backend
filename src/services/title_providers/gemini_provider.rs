@@ -55,6 +55,13 @@ impl GeminiProvider {
         })
     }
 
+    pub fn with_custom_api_key(api_key: String) -> Result<Self, String> {
+        Ok(Self {
+            api_key,
+            client: reqwest::Client::new(),
+        })
+    }
+
     async fn call_api(&self, prompt: &str) -> Result<String, String> {
         let request_body = GeminiRequest {
             contents: vec![Content {
@@ -158,5 +165,9 @@ impl TitleProvider for GeminiProvider {
 
     fn name(&self) -> &'static str {
         "google-gemini-2.5-flash"
+    }
+
+    fn with_api_key(api_key: String) -> Result<Self, String> {
+        Self::with_custom_api_key(api_key)
     }
 }

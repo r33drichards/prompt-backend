@@ -28,6 +28,11 @@ pub trait TitleProvider: Send + Sync {
 
     /// Get the name of this provider
     fn name(&self) -> &'static str;
+
+    /// Create a new instance with a custom API key
+    fn with_api_key(api_key: String) -> Result<Self, String>
+    where
+        Self: Sized;
 }
 
 /// Provider types available in the system
@@ -63,17 +68,29 @@ impl ProviderFactory {
             .unwrap_or_else(|_| "anthropic-haiku".to_string());
 
         let provider_type = ProviderType::from_str(&provider_name)?;
-        Self::create(provider_type)
+        Self::create(provider_type, None)
     }
 
-    /// Create a specific provider by type
-    pub fn create(provider_type: ProviderType) -> Result<Box<dyn TitleProvider>, String> {
+    /// Create a provider with optional custom API key
+    /// If api_key is None, uses environment variable
+    pub fn create(
+        provider_type: ProviderType,
+        api_key: Option<String>,
+    ) -> Result<Box<dyn TitleProvider>, String> {
         match provider_type {
             ProviderType::AnthropicHaiku => {
-                Ok(Box::new(anthropic_provider::AnthropicProvider::new()?))
+                if let Some(key) = api_key {
+                    Ok(Box::new(anthropic_provider::AnthropicProvider::with_api_key(key)?))
+                } else {
+                    Ok(Box::new(anthropic_provider::AnthropicProvider::new()?))
+                }
             }
             ProviderType::GeminiFlash => {
-                Ok(Box::new(gemini_provider::GeminiProvider::new()?))
+                if let Some(key) = api_key {
+                    Ok(Box::new(gemini_provider::GeminiProvider::with_api_key(key)?))
+                } else {
+                    Ok(Box::new(gemini_provider::GeminiProvider::new()?))
+                }
             }
         }
     }

@@ -36,6 +36,8 @@ pub struct Model {
     pub cancelled_by: Option<String>,
     #[sea_orm(nullable)]
     pub process_pid: Option<i32>,
+    #[sea_orm(nullable)]
+    pub title_provider_api_key: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
