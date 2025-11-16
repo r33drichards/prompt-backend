@@ -3,6 +3,7 @@ use std::time::Duration;
 use tracing::{error, info, warn};
 
 use crate::entities::session::{self, CancellationStatus, Entity as Session, UiStatus};
+use crate::services::dead_letter_queue::insert_dlq_entry;
 
 /// Periodic poller that checks for sessions with cancellation requested
 /// and running processes, then kills those processes
@@ -122,10 +123,46 @@ async fn enforce_cancellations(db: &DatabaseConnection) -> anyhow::Result<usize>
                 }
             }
             Err(e) => {
-                error!(
+                let error_msg = format!(
                     "Failed to execute kill command for process {} (session {}): {}",
                     pid, session_id, e
                 );
+                error!("{}", error_msg);
+
+                // Create entity data with session and process info for DLQ
+                let entity_data = serde_json::json!({
+                    "session_id": session_id,
+                    "process_pid": pid,
+                    "cancellation_status": session_model.cancellation_status,
+                    "ui_status": session_model.ui_status,
+                    "error_type": "kill_command_execution_failed",
+                });
+
+                // Add to dead letter queue since kill command execution failed
+                match insert_dlq_entry(
+                    db,
+                    "cancellation_enforcer",
+                    session_id,
+                    Some(entity_data),
+                    1, // First failure, retry_count = 1
+                    &error_msg,
+                    session_model.updated_at,
+                )
+                .await
+                {
+                    Ok(_) => {
+                        info!(
+                            "Added failed kill command for session {} to dead letter queue",
+                            session_id
+                        );
+                    }
+                    Err(dlq_err) => {
+                        error!(
+                            "Failed to add session {} to dead letter queue: {}",
+                            session_id, dlq_err
+                        );
+                    }
+                }
             }
         }
     }
