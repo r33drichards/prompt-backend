@@ -97,7 +97,7 @@
           linuxPkgs.claude-code
           linuxPkgs.bashInteractive
           # uncomment this for debugging purposes
-          linuxPkgs.uutils-coreutils-noprefix
+          # linuxPkgs.uutils-coreutils-noprefix
         ];
 
         # Script to generate TypeScript API client
