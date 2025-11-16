@@ -149,7 +149,7 @@ pub async fn create(
 
     let prompt = "todo".to_string();
 
-    // Generate title using Anthropic Haiku
+    // Generate title using configured provider from environment
     let title = anthropic::generate_session_title(&input.repo, &input.target_branch, &prompt)
         .await
         .unwrap_or_else(|e| {
@@ -157,7 +157,7 @@ pub async fn create(
             "Untitled Session".to_string()
         });
 
-    // Generate branch name
+    // Generate branch name using configured provider from environment
     let generated_branch = anthropic::generate_branch_name(
         &input.repo,
         &input.target_branch,
@@ -227,7 +227,7 @@ pub async fn create_with_prompt(
         "prompt_content" = prompt_content,
     );
 
-    // Generate title using Anthropic Haiku
+    // Generate title using configured provider from environment
     let title =
         anthropic::generate_session_title(&input.repo, &input.target_branch, &prompt_content)
             .await
@@ -236,7 +236,7 @@ pub async fn create_with_prompt(
                 "Untitled Session".to_string()
             });
 
-    // Generate branch name
+    // Generate branch name using configured provider from environment
     let generated_branch = anthropic::generate_branch_name(
         &input.repo,
         &input.target_branch,
