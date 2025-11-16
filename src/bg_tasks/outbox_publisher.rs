@@ -458,6 +458,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
             .current_dir(temp_dir.path())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
+            .env_remove("ANTHROPIC_API_KEY")
             .spawn();
 
         let mut child = match child {
