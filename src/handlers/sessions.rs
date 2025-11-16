@@ -23,7 +23,6 @@ pub struct CreateSessionInput {
     pub parent: Option<String>,
     pub repo: String,
     pub target_branch: String,
-    pub title_provider_api_key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -39,7 +38,6 @@ pub struct CreateSessionWithPromptInput {
     pub target_branch: String,
     pub messages: serde_json::Value,
     pub parent_id: Option<String>,
-    pub title_provider_api_key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -151,12 +149,11 @@ pub async fn create(
 
     let prompt = "todo".to_string();
 
-    // Generate title using configured provider with optional custom API key
-    let title = anthropic::generate_session_title_with_key(
+    // Generate title using configured provider from environment
+    let title = anthropic::generate_session_title(
         &input.repo,
         &input.target_branch,
         &prompt,
-        input.title_provider_api_key.clone(),
     )
     .await
     .unwrap_or_else(|e| {
@@ -164,13 +161,12 @@ pub async fn create(
         "Untitled Session".to_string()
     });
 
-    // Generate branch name using configured provider with optional custom API key
-    let generated_branch = anthropic::generate_branch_name_with_key(
+    // Generate branch name using configured provider from environment
+    let generated_branch = anthropic::generate_branch_name(
         &input.repo,
         &input.target_branch,
         &prompt,
         &id.to_string(),
-        input.title_provider_api_key.clone(),
     )
     .await
     .unwrap_or_else(|e| {
@@ -196,7 +192,6 @@ pub async fn create(
         cancelled_at: Set(None),
         cancelled_by: Set(None),
         process_pid: Set(None),
-        title_provider_api_key: Set(input.title_provider_api_key.clone()),
     };
 
     match new_session.insert(db.inner()).await {
@@ -236,12 +231,11 @@ pub async fn create_with_prompt(
         "prompt_content" = prompt_content,
     );
 
-    // Generate title using configured provider with optional custom API key
-    let title = anthropic::generate_session_title_with_key(
+    // Generate title using configured provider from environment
+    let title = anthropic::generate_session_title(
         &input.repo,
         &input.target_branch,
         &prompt_content,
-        input.title_provider_api_key.clone(),
     )
     .await
     .unwrap_or_else(|e| {
@@ -249,13 +243,12 @@ pub async fn create_with_prompt(
         "Untitled Session".to_string()
     });
 
-    // Generate branch name using configured provider with optional custom API key
-    let generated_branch = anthropic::generate_branch_name_with_key(
+    // Generate branch name using configured provider from environment
+    let generated_branch = anthropic::generate_branch_name(
         &input.repo,
         &input.target_branch,
         &prompt_content,
         &session_id.to_string(),
-        input.title_provider_api_key.clone(),
     )
     .await
     .unwrap_or_else(|e| {
@@ -281,7 +274,6 @@ pub async fn create_with_prompt(
         cancelled_at: Set(None),
         cancelled_by: Set(None),
         process_pid: Set(None),
-        title_provider_api_key: Set(input.title_provider_api_key.clone()),
     };
 
     // Insert the session
