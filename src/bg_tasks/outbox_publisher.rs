@@ -39,7 +39,7 @@ fn get_primary_repo_url(session: &crate::entities::session::Model) -> String {
     if let Some(repos_json) = &session.repos {
         if let Ok(repos_config) = serde_json::from_value::<ReposConfig>(repos_json.clone()) {
             if let Some(first_repo) = repos_config.repos.first() {
-                return first_repo.url.clone();
+                return first_repo.repo.clone();
             }
         }
     }

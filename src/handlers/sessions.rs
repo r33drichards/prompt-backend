@@ -175,8 +175,9 @@ pub async fn create(
     // Create the new repos structure
     let repos_config = ReposConfig {
         repos: vec![RepoConfig {
-            url: input.repo.clone(),
-            branch: input.target_branch.clone(),
+            repo: input.repo.clone(),
+            branch: generated_branch.clone(),
+            target_branch: input.target_branch.clone(),
         }],
     };
     let repos_json = serde_json::to_value(repos_config).ok();
@@ -264,8 +265,9 @@ pub async fn create_with_prompt(
     // Create the new repos structure
     let repos_config = ReposConfig {
         repos: vec![RepoConfig {
-            url: input.repo.clone(),
-            branch: input.target_branch.clone(),
+            repo: input.repo.clone(),
+            branch: generated_branch.clone(),
+            target_branch: input.target_branch.clone(),
         }],
     };
     let repos_json = serde_json::to_value(repos_config).ok();
