@@ -34,8 +34,8 @@ pub struct AnthropicProvider {
 
 impl AnthropicProvider {
     pub fn new() -> Result<Self, String> {
-        let api_key = env::var("ANTHROPIC_API_KEY")
-            .map_err(|_| "ANTHROPIC_API_KEY not set in environment".to_string())?;
+        let api_key = env::var("TITLE_PROVIDER_API_KEY")
+            .map_err(|_| "TITLE_PROVIDER_API_KEY not set in environment".to_string())?;
 
         Ok(Self {
             api_key,

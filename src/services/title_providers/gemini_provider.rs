@@ -46,8 +46,8 @@ pub struct GeminiProvider {
 
 impl GeminiProvider {
     pub fn new() -> Result<Self, String> {
-        let api_key = env::var("GEMINI_API_KEY")
-            .map_err(|_| "GEMINI_API_KEY not set in environment".to_string())?;
+        let api_key = env::var("TITLE_PROVIDER_API_KEY")
+            .map_err(|_| "TITLE_PROVIDER_API_KEY not set in environment".to_string())?;
 
         Ok(Self {
             api_key,
