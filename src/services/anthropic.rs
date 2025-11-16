@@ -3,7 +3,7 @@ use super::title_providers::ProviderFactory;
 /// Generate a session title using the configured title provider
 /// Reads TITLE_PROVIDER env var to determine which provider to use
 /// Defaults to Anthropic Haiku if not specified
-/// API keys are read from environment variables (ANTHROPIC_API_KEY or GEMINI_API_KEY)
+/// API key is read from TITLE_API_KEY environment variable
 pub async fn generate_session_title(
     git_repo: &str,
     target_branch: &str,
@@ -16,7 +16,7 @@ pub async fn generate_session_title(
 /// Generate a git branch name using the configured title provider
 /// Reads TITLE_PROVIDER env var to determine which provider to use
 /// Defaults to Anthropic Haiku if not specified
-/// API keys are read from environment variables (ANTHROPIC_API_KEY or GEMINI_API_KEY)
+/// API key is read from TITLE_API_KEY environment variable
 pub async fn generate_branch_name(
     git_repo: &str,
     target_branch: &str,

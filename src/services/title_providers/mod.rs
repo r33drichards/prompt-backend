@@ -58,7 +58,7 @@ pub struct ProviderFactory;
 impl ProviderFactory {
     /// Create a provider based on environment configuration
     /// Reads from TITLE_PROVIDER env var, defaults to anthropic-haiku
-    /// API keys are read from environment variables (ANTHROPIC_API_KEY or GEMINI_API_KEY)
+    /// API key is read from TITLE_API_KEY environment variable
     pub fn create_from_env() -> Result<Box<dyn TitleProvider>, String> {
         let provider_name = std::env::var("TITLE_PROVIDER")
             .unwrap_or_else(|_| "anthropic-haiku".to_string());

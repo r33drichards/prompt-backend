@@ -271,7 +271,7 @@ KEYCLOAK_ISSUER=http://localhost:8080/realms/oauth2-realm
 KEYCLOAK_JWKS_URI=http://localhost:8080/realms/oauth2-realm/protocol/openid-connect/certs
 REDIS_URL=redis://127.0.0.1:6379/
 DATABASE_URL=postgres://promptuser:promptpass@localhost:5432/prompt_backend
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+TITLE_API_KEY=your_api_key_here
 ```
 
 ### Frontend: `.env.development`

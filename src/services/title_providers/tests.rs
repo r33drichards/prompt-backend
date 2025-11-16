@@ -42,13 +42,13 @@ mod tests {
 
     #[test]
     fn test_provider_factory_create() {
-        // Note: These tests will fail if the required API keys are not set
+        // Note: These tests will fail if the required API key is not set
         // They're here to verify the structure compiles correctly
 
         // Test creating Anthropic provider
         let result = ProviderFactory::create(ProviderType::AnthropicHaiku);
-        // We expect this to fail without ANTHROPIC_API_KEY
-        if std::env::var("ANTHROPIC_API_KEY").is_ok() {
+        // We expect this to fail without TITLE_API_KEY
+        if std::env::var("TITLE_API_KEY").is_ok() {
             assert!(result.is_ok());
         } else {
             assert!(result.is_err());
@@ -56,8 +56,8 @@ mod tests {
 
         // Test creating Gemini provider
         let result = ProviderFactory::create(ProviderType::GeminiFlash);
-        // We expect this to fail without GEMINI_API_KEY
-        if std::env::var("GEMINI_API_KEY").is_ok() {
+        // We expect this to fail without TITLE_API_KEY
+        if std::env::var("TITLE_API_KEY").is_ok() {
             assert!(result.is_ok());
         } else {
             assert!(result.is_err());

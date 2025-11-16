@@ -12,12 +12,10 @@ The title provider system allows you to configure which AI service is used to ge
 
 ### 1. Anthropic Haiku 4.5 (Default)
 - **Model**: `claude-haiku-4-5`
-- **API Key**: `ANTHROPIC_API_KEY`
 - **Configuration Values**: `anthropic`, `anthropic-haiku`, `anthropic-haiku-4-5`
 
 ### 2. Google Gemini 2.5 Flash
 - **Model**: `gemini-2.5-flash`
-- **API Key**: `GEMINI_API_KEY`
 - **Configuration Values**: `gemini`, `gemini-flash`, `google-gemini-2-5`, `google-gemini-2.5-flash`
 
 ## Configuration
@@ -36,17 +34,15 @@ If `TITLE_PROVIDER` is not set, the system defaults to `anthropic-haiku`.
 
 ## Required Environment Variables
 
-Depending on which provider you use, you need to set the corresponding API key:
+All providers use a single `TITLE_API_KEY` environment variable for authentication:
 
-### For Anthropic Provider
 ```bash
-export ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# Set this to your Anthropic API key if using anthropic-haiku provider
+# OR set this to your Google Gemini API key if using gemini-flash provider
+export TITLE_API_KEY=your_api_key_here
 ```
 
-### For Gemini Provider
-```bash
-export GEMINI_API_KEY=your_gemini_api_key_here
-```
+This unified approach prevents accidental shadowing of provider-specific API key variables.
 
 ## Usage
 

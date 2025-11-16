@@ -175,7 +175,7 @@ Required for all deployments:
 - `REDIS_URL`: Redis connection string (default: `redis://127.0.0.1/`)
 - `KEYCLOAK_ISSUER`: OAuth issuer URL
 - `KEYCLOAK_JWKS_URI`: JWKS endpoint for JWT validation
-- `ANTHROPIC_API_KEY`: For title generation
+- `TITLE_API_KEY`: For title generation (used by selected provider)
 
 Optional:
 - `ROCKET_PORT`: Web server port (default: 8000)
