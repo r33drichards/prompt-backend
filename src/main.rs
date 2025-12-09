@@ -8,6 +8,7 @@ use tracing::info;
 use crate::auth::JwksCache;
 use crate::db::establish_connection;
 
+use rocket::http::Status;
 use rocket_cors::{AllowedOrigins, CorsOptions};
 use rocket_okapi::settings::UrlObject;
 use rocket_okapi::swagger_ui::make_swagger_ui;
@@ -22,6 +23,13 @@ mod entities;
 mod error;
 mod handlers;
 mod services;
+
+/// Catch-all OPTIONS handler for CORS preflight requests.
+/// The CORS fairing will add the appropriate headers to the response.
+#[options("/<_..>")]
+fn cors_preflight() -> Status {
+    Status::NoContent
+}
 
 /// CLI application for the prompt backend server
 #[derive(Parser)]
@@ -265,7 +273,7 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
                 handlers::dead_letter_queue::abandon_dlq,
             ],
         )
-        .mount("/", routes![handlers::metrics::metrics])
+        .mount("/", routes![handlers::metrics::metrics, cors_preflight])
         .mount(
             "/swagger-ui/",
             make_swagger_ui(&SwaggerUIConfig {
