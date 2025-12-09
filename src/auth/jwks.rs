@@ -71,12 +71,31 @@ impl JwksCache {
     pub async fn fetch_jwks(&self) -> Result<Jwks, String> {
         let response = reqwest::get(&self.jwks_uri)
             .await
-            .map_err(|e| format!("Failed to fetch JWKS: {}", e))?;
+            .map_err(|e| format!("Failed to fetch JWKS from {}: {}", self.jwks_uri, e))?;
 
-        let jwks: Jwks = response
-            .json()
+        let status = response.status();
+        if !status.is_success() {
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "unable to read response body".to_string());
+            return Err(format!(
+                "JWKS endpoint {} returned HTTP {}: {}",
+                self.jwks_uri, status, body
+            ));
+        }
+
+        let body = response
+            .text()
             .await
-            .map_err(|e| format!("Failed to parse JWKS: {}", e))?;
+            .map_err(|e| format!("Failed to read JWKS response body: {}", e))?;
+
+        let jwks: Jwks = serde_json::from_str(&body).map_err(|e| {
+            format!(
+                "Failed to parse JWKS from {}: {}. Response body: {}",
+                self.jwks_uri, e, body
+            )
+        })?;
 
         let mut cache = self.cache.write().await;
         *cache = Some(jwks.clone());

@@ -192,6 +192,18 @@ async fn run_server(_redis_url: String, database_url: String) -> anyhow::Result<
         .expect("Failed to run migrations");
     println!("Migrations completed successfully");
 
+    // Setup Keycloak realm if it doesn't exist
+    // This is only run if KEYCLOAK_URL is set (i.e., we have admin access)
+    if std::env::var("KEYCLOAK_URL").is_ok() {
+        match services::keycloak::setup_keycloak_realm().await {
+            Ok(()) => println!("Keycloak realm setup completed"),
+            Err(e) => println!(
+                "Warning: Keycloak realm setup failed: {}. Proceeding with JWKS fetch anyway.",
+                e
+            ),
+        }
+    }
+
     // Initialize JWKS cache
     let keycloak_issuer = std::env::var("KEYCLOAK_ISSUER").expect("KEYCLOAK_ISSUER must be set");
     let keycloak_jwks_uri =
