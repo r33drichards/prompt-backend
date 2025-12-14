@@ -284,12 +284,23 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
         error!("Failed to authenticate with GitHub: {}", e);
         Error::Failed(Box::new(e))
     })?;
+    // Get repo URL and branch using backwards-compatible helper methods
+    let repo_url = _session_model.get_repo_url().ok_or_else(|| {
+        error!("No repository URL found for session {}", session_id);
+        Error::Failed("No repository URL configured".into())
+    })?;
+    
+    let target_branch = _session_model.get_repo_branch().ok_or_else(|| {
+        error!("No target branch found for session {}", session_id);
+        Error::Failed("No target branch configured".into())
+    })?;
+
     // clone the repo using session_id as directory name
     let repo_dir = format!("repo_{}", session_id);
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
         command: format!(
             "git clone https://github.com/{}.git {}",
-            _session_model.repo.clone().unwrap(),
+            repo_url,
             repo_dir
         ),
         async_mode: false,
@@ -308,7 +319,7 @@ pub async fn process_outbox_job(job: OutboxJob, ctx: Data<OutboxContext>) -> Res
     sbx.exec_command_v1_shell_exec_post(&ShellExecRequest {
         command: format!(
             "git checkout {}",
-            _session_model.target_branch.clone().unwrap()
+            target_branch
         ),
         async_mode: false,
         id: None,

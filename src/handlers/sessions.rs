@@ -56,6 +56,7 @@ pub struct SessionDto {
     pub sbx_config: Option<serde_json::Value>,
     pub parent: Option<String>,
     pub branch: Option<String>,
+    /// Deprecated: Use repos field instead
     pub repo: Option<String>,
     pub target_branch: Option<String>,
     pub title: Option<String>,
@@ -67,26 +68,29 @@ pub struct SessionDto {
     pub cancelled_at: Option<String>,
     pub cancelled_by: Option<String>,
     pub preserve_sandbox: Option<bool>,
+    /// New field: supports multiple repositories
+    pub repos: Option<serde_json::Value>,
 }
 
 impl From<SessionModel> for SessionDto {
     fn from(model: SessionModel) -> Self {
         SessionDto {
             id: model.id.to_string(),
-            sbx_config: model.sbx_config,
+            sbx_config: model.sbx_config.clone(),
             parent: model.parent.map(|p| p.to_string()),
-            branch: model.branch,
-            repo: model.repo,
-            target_branch: model.target_branch,
-            title: model.title,
-            ui_status: model.ui_status,
+            branch: model.branch.clone(),
+            repo: model.repo.clone(),
+            target_branch: model.target_branch.clone(),
+            title: model.title.clone(),
+            ui_status: model.ui_status.clone(),
             created_at: model.created_at.to_string(),
             updated_at: model.updated_at.to_string(),
             deleted_at: model.deleted_at.map(|d| d.to_string()),
-            cancellation_status: model.cancellation_status,
+            cancellation_status: model.cancellation_status.clone(),
             cancelled_at: model.cancelled_at.map(|d| d.to_string()),
-            cancelled_by: model.cancelled_by,
+            cancelled_by: model.cancelled_by.clone(),
             preserve_sandbox: model.preserve_sandbox,
+            repos: model.repos,
         }
     }
 }
@@ -197,6 +201,7 @@ pub async fn create(
         cancelled_by: Set(None),
         process_pid: Set(None),
         preserve_sandbox: Set(None),
+        repos: Set(None),
     };
 
     match new_session.insert(db.inner()).await {
@@ -277,6 +282,7 @@ pub async fn create_with_prompt(
         cancelled_by: Set(None),
         process_pid: Set(None),
         preserve_sandbox: Set(None),
+        repos: Set(None),
     };
 
     // Insert the session
