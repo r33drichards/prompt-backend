@@ -47,6 +47,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Comment PR with image tag
+        id: comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const shortSha = context.payload.pull_request.head.sha.substring(0, 7);
+            const imageTag = `pr-${prNumber}-${shortSha}`;
+            const fullImage = `${{ env.IMAGE_NAME }}:${imageTag}`;
+
+            const { data: comment } = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `🐳 Building Docker image: \`${fullImage}\``
+            });
+
+            return comment.id;
+          result-encoding: string
+
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
 
@@ -85,6 +105,18 @@ jobs:
 
           echo "✅ Pushed PR image:"
           echo "   - ${{ env.IMAGE_NAME }}:${PR_TAG}"
+
+      - name: React to comment when done
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const commentId = ${{ steps.comment.outputs.result }};
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: commentId,
+              content: 'rocket'
+            });
 
   build:
     runs-on: ubuntu-latest
