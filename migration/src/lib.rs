@@ -21,6 +21,7 @@ mod m20251111_000001_add_cancellation_to_session;
 mod m20251111_000002_add_process_pid_to_session;
 mod m20251116_000001_add_title_provider_api_key_to_session;
 mod m20251116_000002_drop_title_provider_api_key_from_session;
+mod m20251214_000001_add_preserve_sandbox_to_session;
 
 pub struct Migrator;
 
@@ -49,6 +50,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20251111_000002_add_process_pid_to_session::Migration),
             Box::new(m20251116_000001_add_title_provider_api_key_to_session::Migration),
             Box::new(m20251116_000002_drop_title_provider_api_key_from_session::Migration),
+            Box::new(m20251214_000001_add_preserve_sandbox_to_session::Migration),
         ]
     }
 }

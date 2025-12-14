@@ -47,6 +47,13 @@ async fn poll_and_return_ips(db: &DatabaseConnection) -> anyhow::Result<usize> {
         let session_id = session.id;
         let retry_count = session.ip_return_retry_count;
 
+        // Skip sessions with preserve_sandbox = true UNLESS they are Archived
+        // This allows stopped sessions to keep their sandbox for resumption
+        // but ensures archived sessions always return their sandbox
+        if session.preserve_sandbox == Some(true) && session.ui_status != UiStatus::Archived {
+            continue;
+        }
+
         // Check if this session is already in the DLQ
         match exists_in_dlq(db, "ip_return_poller", session_id).await {
             Ok(true) => {
