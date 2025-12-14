@@ -98,11 +98,7 @@ async fn poll_and_enqueue_prompts(
             );
 
             let borrowed_ip = ip_client.handlers_ip_borrow(None).await.map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to borrow IP for session {}: {}",
-                    session_id,
-                    e
-                )
+                anyhow::anyhow!("Failed to borrow IP for session {}: {}", session_id, e)
             })?;
 
             info!(
