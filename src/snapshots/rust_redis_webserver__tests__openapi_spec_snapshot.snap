@@ -1267,6 +1267,10 @@ expression: spec
           "cancelledBy": {
             "type": "string",
             "nullable": true
+          },
+          "preserveSandbox": {
+            "type": "boolean",
+            "nullable": true
           }
         }
       },
