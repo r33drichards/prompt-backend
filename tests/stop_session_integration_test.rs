@@ -78,9 +78,10 @@ async fn test_stop_session_sets_preserve_sandbox() {
         "item": {"api_url": "http://test-sandbox:8080"},
         "borrow_token": "test-token-123"
     });
-    let session = create_test_session_with_sandbox(&db, user_id, Some(99999), Some(sbx_config), None)
-        .await
-        .expect("Failed to create test session");
+    let session =
+        create_test_session_with_sandbox(&db, user_id, Some(99999), Some(sbx_config), None)
+            .await
+            .expect("Failed to create test session");
 
     // Verify initial state
     assert_eq!(session.preserve_sandbox, None);
@@ -121,9 +122,10 @@ async fn test_cancellation_enforcer_preserves_sandbox_when_flag_set() {
         "item": {"api_url": "http://test-sandbox:8080"},
         "borrow_token": "test-token-456"
     });
-    let session = create_test_session_with_sandbox(&db, user_id, Some(88888), Some(sbx_config.clone()), None)
-        .await
-        .expect("Failed to create test session");
+    let session =
+        create_test_session_with_sandbox(&db, user_id, Some(88888), Some(sbx_config.clone()), None)
+            .await
+            .expect("Failed to create test session");
 
     // Set stop request with preserve_sandbox
     let mut active_session: rust_redis_webserver::entities::session::ActiveModel = session.into();
@@ -172,9 +174,10 @@ async fn test_cancellation_enforcer_returns_sandbox_when_flag_not_set() {
         "item": {"api_url": "http://test-sandbox:8080"},
         "borrow_token": "test-token-789"
     });
-    let session = create_test_session_with_sandbox(&db, user_id, Some(77777), Some(sbx_config), None)
-        .await
-        .expect("Failed to create test session");
+    let session =
+        create_test_session_with_sandbox(&db, user_id, Some(77777), Some(sbx_config), None)
+            .await
+            .expect("Failed to create test session");
 
     // Set cancel request (not stop - preserve_sandbox remains None)
     let mut active_session: rust_redis_webserver::entities::session::ActiveModel = session.into();
@@ -217,9 +220,10 @@ async fn test_ip_return_poller_skips_preserved_sandbox() {
         "item": {"api_url": "http://test-sandbox:8080"},
         "borrow_token": "test-token-skip"
     });
-    let session = create_test_session_with_sandbox(&db, user_id, None, Some(sbx_config), Some(true))
-        .await
-        .expect("Failed to create test session");
+    let session =
+        create_test_session_with_sandbox(&db, user_id, None, Some(sbx_config), Some(true))
+            .await
+            .expect("Failed to create test session");
 
     // Set to NeedsReview (which normally triggers IP return)
     let mut active_session: rust_redis_webserver::entities::session::ActiveModel = session.into();
@@ -241,13 +245,18 @@ async fn test_ip_return_poller_skips_preserved_sandbox() {
         .expect("Failed to query sessions");
 
     // Our session should be found by the query
-    let found = sessions_for_ip_return.iter().find(|s| s.id == review_session.id);
-    assert!(found.is_some(), "Session should be found by IP return query");
+    let found = sessions_for_ip_return
+        .iter()
+        .find(|s| s.id == review_session.id);
+    assert!(
+        found.is_some(),
+        "Session should be found by IP return query"
+    );
 
     // But the poller should skip it because preserve_sandbox = true and not Archived
     let session_data = found.unwrap();
-    let should_skip = session_data.preserve_sandbox == Some(true)
-        && session_data.ui_status != UiStatus::Archived;
+    let should_skip =
+        session_data.preserve_sandbox == Some(true) && session_data.ui_status != UiStatus::Archived;
     assert!(should_skip, "IP return poller should skip this session");
 
     // Cleanup
@@ -264,9 +273,10 @@ async fn test_archived_session_returns_sandbox_despite_preserve_flag() {
         "item": {"api_url": "http://test-sandbox:8080"},
         "borrow_token": "test-token-archive"
     });
-    let session = create_test_session_with_sandbox(&db, user_id, None, Some(sbx_config), Some(true))
-        .await
-        .expect("Failed to create test session");
+    let session =
+        create_test_session_with_sandbox(&db, user_id, None, Some(sbx_config), Some(true))
+            .await
+            .expect("Failed to create test session");
 
     // Archive the session
     let mut active_session: rust_redis_webserver::entities::session::ActiveModel = session.into();
@@ -279,7 +289,10 @@ async fn test_archived_session_returns_sandbox_despite_preserve_flag() {
     // IP return poller should NOT skip archived sessions even with preserve_sandbox = true
     let should_skip = archived_session.preserve_sandbox == Some(true)
         && archived_session.ui_status != UiStatus::Archived;
-    assert!(!should_skip, "IP return poller should NOT skip archived sessions");
+    assert!(
+        !should_skip,
+        "IP return poller should NOT skip archived sessions"
+    );
 
     // Cleanup
     cleanup_session(&db, archived_session.id).await;
@@ -295,9 +308,10 @@ async fn test_stopped_session_can_be_resumed() {
         "item": {"api_url": "http://test-sandbox:8080"},
         "borrow_token": "test-token-resume"
     });
-    let session = create_test_session_with_sandbox(&db, user_id, None, Some(sbx_config.clone()), Some(true))
-        .await
-        .expect("Failed to create test session");
+    let session =
+        create_test_session_with_sandbox(&db, user_id, None, Some(sbx_config.clone()), Some(true))
+            .await
+            .expect("Failed to create test session");
 
     let mut active_session: rust_redis_webserver::entities::session::ActiveModel = session.into();
     active_session.ui_status = Set(UiStatus::NeedsReviewIpReturned);
@@ -323,7 +337,10 @@ async fn test_stopped_session_can_be_resumed() {
 
     // Simulate prompt poller processing - should reuse existing sandbox
     let has_existing_sandbox = pending_session.sbx_config.is_some();
-    assert!(has_existing_sandbox, "Stopped session should still have sandbox");
+    assert!(
+        has_existing_sandbox,
+        "Stopped session should still have sandbox"
+    );
 
     // Prompt poller would reuse sandbox and clear preserve_sandbox flag
     let mut active_session: rust_redis_webserver::entities::session::ActiveModel =
@@ -358,9 +375,10 @@ async fn test_stop_then_archive_returns_sandbox() {
         "item": {"api_url": "http://test-sandbox:8080"},
         "borrow_token": "test-token-stop-archive"
     });
-    let session = create_test_session_with_sandbox(&db, user_id, None, Some(sbx_config), Some(true))
-        .await
-        .expect("Failed to create test session");
+    let session =
+        create_test_session_with_sandbox(&db, user_id, None, Some(sbx_config), Some(true))
+            .await
+            .expect("Failed to create test session");
 
     let mut active_session: rust_redis_webserver::entities::session::ActiveModel = session.into();
     active_session.ui_status = Set(UiStatus::NeedsReviewIpReturned);
@@ -385,9 +403,12 @@ async fn test_stop_then_archive_returns_sandbox() {
 
     // Archived session should be processed by IP return poller
     // (preserve_sandbox is ignored for Archived sessions)
-    let should_return_sandbox = archived_session.ui_status == UiStatus::Archived
-        && archived_session.sbx_config.is_some();
-    assert!(should_return_sandbox, "Archived session should have sandbox returned");
+    let should_return_sandbox =
+        archived_session.ui_status == UiStatus::Archived && archived_session.sbx_config.is_some();
+    assert!(
+        should_return_sandbox,
+        "Archived session should have sandbox returned"
+    );
 
     // Simulate IP return poller returning the sandbox
     let mut active_session: rust_redis_webserver::entities::session::ActiveModel =
