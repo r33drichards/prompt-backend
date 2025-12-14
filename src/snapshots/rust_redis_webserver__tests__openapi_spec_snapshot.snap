@@ -338,6 +338,51 @@ expression: spec
         ]
       }
     },
+    "/sessions/{id}/stop": {
+      "post": {
+        "description": "Stop a session by ID (preserves sandbox for resumption)",
+        "operationId": "handlers_sessions_stop",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StopSessionOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "# [400 Bad Request](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400)\nThe request given is wrongly formatted or data asked could not be fulfilled. "
+          },
+          "404": {
+            "description": "# [404 Not Found](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404)\nThis response is given when you request a page that does not exists."
+          },
+          "422": {
+            "description": "# [422 Unprocessable Entity](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/422)\nThis response is given when you request body is not correctly formatted. "
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when something wend wrong on the server. "
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
     "/prompts": {
       "post": {
         "description": "Create a new prompt",
@@ -1222,6 +1267,10 @@ expression: spec
           "cancelledBy": {
             "type": "string",
             "nullable": true
+          },
+          "preserveSandbox": {
+            "type": "boolean",
+            "nullable": true
           }
         }
       },
@@ -1329,6 +1378,21 @@ expression: spec
         }
       },
       "CancelSessionOutput": {
+        "type": "object",
+        "required": [
+          "message",
+          "success"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "StopSessionOutput": {
         "type": "object",
         "required": [
           "message",

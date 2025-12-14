@@ -55,6 +55,7 @@ async fn create_test_session(
         cancelled_at: Set(None),
         cancelled_by: Set(None),
         process_pid: Set(process_pid),
+        preserve_sandbox: Set(None),
     };
 
     new_session.insert(db).await
@@ -397,6 +398,7 @@ async fn test_cancellation_preserves_metadata() {
         cancelled_at: Set(None),
         cancelled_by: Set(None),
         process_pid: Set(Some(44444)),
+        preserve_sandbox: Set(None),
     };
 
     let session = new_session
