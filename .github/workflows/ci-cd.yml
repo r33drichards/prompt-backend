@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [ master ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
 env:
   IMAGE_NAME: wholelottahoopla/prompt-backend
   IMAGE_TAG: ${{ github.sha }}
@@ -40,6 +48,83 @@ jobs:
         if: matrix.test-type == 'clippy'
         run: nix develop --command cargo clippy -- -D warnings
 
+
+  build-pr:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comment PR with image tag
+        id: comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const shortSha = context.payload.pull_request.head.sha.substring(0, 7);
+            const imageTag = `pr-${prNumber}-${shortSha}`;
+            const fullImage = `${{ env.IMAGE_NAME }}:${imageTag}`;
+
+            const { data: comment } = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `🐳 Building Docker image: \`${fullImage}\``
+            });
+
+            return comment.id;
+          result-encoding: string
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Build Docker image with Nix
+        run: |
+          echo "Building Docker image with Nix..."
+          nix build .#docker
+
+          echo "Loading Docker image..."
+          docker load < result
+
+          echo "Saving Docker image as artifact..."
+          docker save rust-redis-webserver:latest | gzip > docker-image.tar.gz
+
+      - name: Install skopeo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+
+      - name: Push Docker image for PR
+        env:
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          SHORT_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7)
+          PR_TAG="pr-${PR_NUMBER}-${SHORT_SHA}"
+
+          # Push with PR-specific tag
+          skopeo copy \
+            docker-archive:docker-image.tar.gz \
+            docker://${{ env.IMAGE_NAME }}:${PR_TAG} \
+            --dest-creds wholelottahoopla:$DOCKER_PASSWORD
+
+          echo "✅ Pushed PR image:"
+          echo "   - ${{ env.IMAGE_NAME }}:${PR_TAG}"
+
+      - name: React to comment when done
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const commentId = ${{ steps.comment.outputs.result }};
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: commentId,
+              content: 'rocket'
+            });
 
   build:
     runs-on: ubuntu-latest
