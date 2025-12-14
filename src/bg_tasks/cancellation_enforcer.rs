@@ -70,19 +70,10 @@ async fn enforce_cancellations(db: &DatabaseConnection) -> anyhow::Result<usize>
                 );
                 count += 1;
 
-                // Determine ui_status based on preserve_sandbox flag
-                // If preserve_sandbox = true: NeedsReviewIpReturned (keeps sandbox, resumable)
-                // Otherwise: NeedsReview (IP will be returned by IP return poller)
-                let new_ui_status = if session_model.preserve_sandbox == Some(true) {
-                    UiStatus::NeedsReviewIpReturned
-                } else {
-                    UiStatus::NeedsReview
-                };
-
                 // Update session to mark as cancelled and clear PID
                 let mut active_session: session::ActiveModel = session_model.into();
                 active_session.cancellation_status = Set(Some(CancellationStatus::Cancelled));
-                active_session.ui_status = Set(new_ui_status);
+                active_session.ui_status = Set(UiStatus::NeedsReview);
                 active_session.process_pid = Set(None);
 
                 if let Err(e) = active_session.update(db).await {
@@ -106,17 +97,10 @@ async fn enforce_cancellations(db: &DatabaseConnection) -> anyhow::Result<usize>
                         pid, session_id
                     );
 
-                    // Determine ui_status based on preserve_sandbox flag
-                    let new_ui_status = if session_model.preserve_sandbox == Some(true) {
-                        UiStatus::NeedsReviewIpReturned
-                    } else {
-                        UiStatus::NeedsReview
-                    };
-
                     // Update session anyway to clear the PID and mark as cancelled
                     let mut active_session: session::ActiveModel = session_model.into();
                     active_session.cancellation_status = Set(Some(CancellationStatus::Cancelled));
-                    active_session.ui_status = Set(new_ui_status);
+                    active_session.ui_status = Set(UiStatus::NeedsReview);
                     active_session.process_pid = Set(None);
 
                     if let Err(e) = active_session.update(db).await {

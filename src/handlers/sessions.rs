@@ -66,7 +66,6 @@ pub struct SessionDto {
     pub cancellation_status: Option<CancellationStatus>,
     pub cancelled_at: Option<String>,
     pub cancelled_by: Option<String>,
-    pub preserve_sandbox: Option<bool>,
 }
 
 impl From<SessionModel> for SessionDto {
@@ -86,7 +85,6 @@ impl From<SessionModel> for SessionDto {
             cancellation_status: model.cancellation_status,
             cancelled_at: model.cancelled_at.map(|d| d.to_string()),
             cancelled_by: model.cancelled_by,
-            preserve_sandbox: model.preserve_sandbox,
         }
     }
 }
@@ -127,12 +125,6 @@ pub struct DeleteSessionOutput {
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct CancelSessionOutput {
-    pub success: bool,
-    pub message: String,
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Clone)]
-pub struct StopSessionOutput {
     pub success: bool,
     pub message: String,
 }
@@ -196,7 +188,6 @@ pub async fn create(
         cancelled_at: Set(None),
         cancelled_by: Set(None),
         process_pid: Set(None),
-        preserve_sandbox: Set(None),
     };
 
     match new_session.insert(db.inner()).await {
@@ -276,7 +267,6 @@ pub async fn create_with_prompt(
         cancelled_at: Set(None),
         cancelled_by: Set(None),
         process_pid: Set(None),
-        preserve_sandbox: Set(None),
     };
 
     // Insert the session
@@ -484,49 +474,6 @@ pub async fn cancel(
         Ok(_) => Ok(Json(CancelSessionOutput {
             success: true,
             message: "Session cancellation requested successfully".to_string(),
-        })),
-        Err(e) => Err(Error::database_error(e.to_string())),
-    }
-}
-
-/// Stop a session by ID (preserves sandbox for resumption)
-#[openapi]
-#[post("/sessions/<id>/stop")]
-pub async fn stop(
-    user: AuthenticatedUser,
-    db: &State<DatabaseConnection>,
-    id: String,
-) -> OResult<StopSessionOutput> {
-    let uuid =
-        Uuid::parse_str(&id).map_err(|_| Error::bad_request("Invalid UUID format".to_string()))?;
-
-    // Verify session exists and belongs to user
-    let existing_session = Session::find_by_id(uuid)
-        .filter(session::Column::UserId.eq(&user.user_id))
-        .one(db.inner())
-        .await
-        .map_err(|e| Error::database_error(e.to_string()))?
-        .ok_or_else(|| Error::not_found("Session not found".to_string()))?;
-
-    // Check if already cancelled
-    if let Some(CancellationStatus::Cancelled) = existing_session.cancellation_status {
-        return Ok(Json(StopSessionOutput {
-            success: true,
-            message: "Session is already stopped".to_string(),
-        }));
-    }
-
-    // Update session to mark as cancellation requested with preserve_sandbox = true
-    let mut active_session: session::ActiveModel = existing_session.into();
-    active_session.cancellation_status = Set(Some(CancellationStatus::Requested));
-    active_session.cancelled_at = Set(Some(Utc::now().into()));
-    active_session.cancelled_by = Set(Some(user.user_id.clone()));
-    active_session.preserve_sandbox = Set(Some(true));
-
-    match active_session.update(db.inner()).await {
-        Ok(_) => Ok(Json(StopSessionOutput {
-            success: true,
-            message: "Session stop requested successfully".to_string(),
         })),
         Err(e) => Err(Error::database_error(e.to_string())),
     }

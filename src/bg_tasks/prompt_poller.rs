@@ -66,58 +66,40 @@ async fn poll_and_enqueue_prompts(
             continue;
         }
 
+        // Borrow an IP for this session
+        info!(
+            "Borrowing IP for session {} with {} prompts",
+            session_model.id,
+            prompts.len()
+        );
+
+        let borrowed_ip = ip_client.handlers_ip_borrow(None).await.map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to borrow IP for session {}: {}",
+                session_model.id,
+                e
+            )
+        })?;
+
+        info!(
+            "Successfully borrowed IP for session {}: {:?}",
+            session_model.id, borrowed_ip.item
+        );
+
         // Save session_id before moving session_model
         let session_id = session_model.id;
 
-        // Check if session already has a sandbox (from a previous stop with preserve_sandbox)
-        let has_existing_sandbox = session_model.sbx_config.is_some();
+        // Update session's sbx_config with the borrowed IP data (including borrow_token)
+        let mut active_session: session::ActiveModel = session_model.into();
+        let sbx_config_data = serde_json::json!({
+            "item": borrowed_ip.item,
+            "borrow_token": borrowed_ip.borrow_token,
+        });
+        active_session.sbx_config = Set(Some(sbx_config_data));
+        active_session.ui_status = Set(UiStatus::InProgress);
+        active_session.update(db).await?;
 
-        if has_existing_sandbox {
-            // Reuse existing sandbox - just update status and clear preserve_sandbox flag
-            info!(
-                "Reusing existing sandbox for session {} with {} prompts",
-                session_id,
-                prompts.len()
-            );
-
-            let mut active_session: session::ActiveModel = session_model.into();
-            active_session.ui_status = Set(UiStatus::InProgress);
-            active_session.preserve_sandbox = Set(None); // Clear preserve flag when resuming
-            active_session.cancellation_status = Set(None); // Clear cancellation status for fresh run
-            active_session.cancelled_at = Set(None);
-            active_session.cancelled_by = Set(None);
-            active_session.update(db).await?;
-
-            info!("Session {} resuming with existing sandbox", session_id);
-        } else {
-            // Borrow a new IP for this session
-            info!(
-                "Borrowing IP for session {} with {} prompts",
-                session_id,
-                prompts.len()
-            );
-
-            let borrowed_ip = ip_client.handlers_ip_borrow(None).await.map_err(|e| {
-                anyhow::anyhow!("Failed to borrow IP for session {}: {}", session_id, e)
-            })?;
-
-            info!(
-                "Successfully borrowed IP for session {}: {:?}",
-                session_id, borrowed_ip.item
-            );
-
-            // Update session's sbx_config with the borrowed IP data (including borrow_token)
-            let mut active_session: session::ActiveModel = session_model.into();
-            let sbx_config_data = serde_json::json!({
-                "item": borrowed_ip.item,
-                "borrow_token": borrowed_ip.borrow_token,
-            });
-            active_session.sbx_config = Set(Some(sbx_config_data));
-            active_session.ui_status = Set(UiStatus::InProgress);
-            active_session.update(db).await?;
-
-            info!("Updated session {} sbx_config with borrowed IP", session_id);
-        }
+        info!("Updated session {} sbx_config with borrowed IP", session_id);
 
         // Enqueue each prompt for this session
         for prompt in prompts {
